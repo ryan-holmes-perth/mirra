@@ -1,0 +1,39 @@
+<html>
+
+<head>
+    <!-- <script type="module" src="model.js"></script> -->
+</head>
+
+<body>
+    Hii2
+
+    <script type="module">
+
+        import { Person, PersonView_list } from './static/model.js';
+
+
+
+        // let p = new Person(null, { name: 'Ryan D' });
+
+        async function t() {
+            // await p.save();
+
+            // console.log(p);
+            console.log('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%');
+
+            let p2 = new Person('6836c93c89bd41d4296029a1');
+
+            // p2.save();
+
+            setTimeout(() => {
+                console.log(p2);
+            }, 3000);
+        }
+
+        t();
+
+    </script>
+
+</body>
+
+</html>

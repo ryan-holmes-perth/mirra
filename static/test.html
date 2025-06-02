@@ -1,0 +1,101 @@
+<html>
+
+<head>
+    <!-- <script type="module" src="model.js"></script> -->
+</head>
+
+<body>
+    Hiii4
+
+    <div id="d1"></div>
+    <div id="d2"></div>
+
+    <script type="module">
+
+        import { DateTime, Duration } from 'https://esm.sh/luxon';
+        import $ from 'https://esm.sh/jquery';
+        import { MirraModel, MirraView, MirraEdit, MirraModelMongoDB } from './static/mirra.js';
+
+        class Model extends MirraModelMongoDB {
+        }
+
+
+        class Person extends Model {
+            // static {
+            //     console.log(new Date().getTime());
+            //     this.fetchIfAuto();
+            //     console.log(new Date().getTime());
+            //     // setTimeout(() => { this.fetchIfAuto() }, 0);
+            // }
+
+
+            static get type() {
+                return 'persons';
+            }
+            get properties() {
+                return {
+                    name: { type: String, length: { min: 2, max: 30 } }
+                };
+            }
+        }
+
+
+
+        class PersonView_list extends MirraView {
+            static expects() {
+                return { person: Person }    // name of model and its class
+            }
+
+            create() {
+                this.ui = $(`<h5 class='editable'>`).on('click', () => { 
+                    MirraEdit.edit(this, x => {
+                        this.model('person').set({ name: x }).save();
+                    }) 
+                });
+            }
+            update() {
+                console.log(this);
+                const [mPerson, dPerson] = this.modeldata('person');
+                console.log(dPerson.name);
+                this.ui.text(dPerson.name);
+            }
+
+            static createGroup() {
+                this.uiGroup = $(`<div>`);
+            }
+            static updateGroup() {
+                this.uiGroup.empty();
+                this.views.forEach(view => {
+                    this.uiGroup.append(view.ui);
+                });
+            }
+        }
+
+
+
+        // let p1 = new Person({ name: 'Sam G' });
+        // let p2 = new Person({ name: 'Tim P' });
+        // await p1.save();
+        // await p2.save();
+        // console.log(p2);
+        console.log("!", new Date().getTime());
+
+        // Person.fetch().then(() => {
+        //     Person.items().forEach(p => { new PersonView_list({person:p}) });;
+        //     PersonView_list.updateGroup();
+        //     PersonView_list.uiGroup.appendTo('body');
+        // });
+
+        // PersonView_list.fetch(Person).then(_ => PersonView_list.to('body'));
+
+
+        PersonView_list.init(Person, '#d1');
+
+        
+        // setTimeout(() => { PersonView_list.init(Person, '#d2'); }, 3000);
+
+    </script>
+
+</body>
+
+</html>
