@@ -1,0 +1,106 @@
+
+<head>
+    <style>
+/* Base Page Styling */
+body {
+  margin: 0;
+  padding: 2rem;
+  font-family: 'Segoe UI', Roboto, sans-serif;
+  background: #c5c5db; /* Very dark background */
+  color: #f5f5f5;
+}
+
+/* Section Styling */
+.section {
+  position: relative;
+  background: #1c9c34; /* Dark card background */
+  border-radius: 1rem;
+  margin: 2rem auto;
+  padding: 2rem;
+  max-width: 900px;
+  z-index: 0;
+  box-shadow: inset 0 0 12px 6px rgba(0, 0, 0, 0.9);
+
+  transition: box-shadow 0.3s ease;
+}
+
+/* Raised whitish border layer */
+.section::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  border: 0.5rem solid rgba(200,200,200, 1);
+  border-radius: 1rem;
+  z-index: -1;
+  /* transform: translate(20px, 20px); */
+  box-shadow: 0 0 8px 4px rgba(0, 0, 0, 0.58);
+  transition: box-shadow 0.3s ease;
+}
+
+/* Hover effect (deeper shadow, more lift visually) */
+.section:hover {
+  box-shadow: inset 0 0 0 0 rgba(0, 0, 0, 0.9);
+}
+
+.section:hover::before {
+  box-shadow: 0 0 7px 3px rgba(0, 0, 0, 0.58);
+}
+
+/* Flat look for active state */
+.section.active {
+  box-shadow: none;
+}
+
+.section.active::before {
+  /* box-shadow: none; */
+  box-shadow: 0 0 2px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Buttons */
+button,
+.button {
+  background-color: #4a90e2;
+  color: white;
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, background-color 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* Button Hover – brighter and deeper */
+button:hover,
+.button:hover {
+  background-color: #2e3032;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+/* Button Active – flatter look */
+button:active,
+.button:active {
+  background-color: #031729;
+  box-shadow: none;
+}
+
+    </style>
+</head>
+<body>
+    <div class="section">
+  <h2>Intro Section</h2>
+  <p>This section floats above the page with soft white borders and padding.</p>
+</div>
+
+<div class="section active">
+  <h2>Active Section</h2>
+  <p>This section appears flat on the background to indicate it's selected or active.</p>
+</div>
+
+<div class="section">
+  <h2>Call to Action</h2>
+  <button>Click Me</button>
+</div>
+
+</body>

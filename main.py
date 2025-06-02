@@ -215,8 +215,9 @@ class CRUDRouterFactory:
             saved_doc = collection.find_one({"_id": result.inserted_id})
             item = Model.model_validate(saved_doc)
             await manager.send_json({
-                "entity": entity_name,
+                "entity": f"{route_prefix}",
                 "mode": "create",
+                "key": result.inserted_id,
                 "data": item.model_dump(by_alias=True)
             })
             return item
@@ -252,6 +253,7 @@ class CRUDRouterFactory:
             await manager.send_json({
                 "entity": f"{route_prefix}/{item_id}",
                 "mode": "update",
+                "key": item_id,
                 "data": item.model_dump(by_alias=True)
             })
             return item
@@ -266,8 +268,9 @@ class CRUDRouterFactory:
                 raise HTTPException(status_code=404, detail="Item not found")
             item = Model.model_validate(deleted_doc)
             await manager.send_json({
-                "entity": entity_name,
+                "entity": f"{route_prefix}/{item_id}",
                 "mode": "delete",
+                "key": item_id,
                 "data": item.model_dump(by_alias=True)
             })
             return item

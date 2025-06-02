@@ -22,9 +22,9 @@
 
         class Person extends Model {
             // static {
-            //     console.log(new Date().getTime());
+            //     // console.log(new Date().getTime());
             //     this.fetchIfAuto();
-            //     console.log(new Date().getTime());
+            //     // console.log(new Date().getTime());
             //     // setTimeout(() => { this.fetchIfAuto() }, 0);
             // }
 
@@ -47,26 +47,50 @@
             }
 
             create() {
-                this.ui = $(`<h5 class='editable'>`).on('click', () => { 
+                this.ui = $(`<h5 class='editable'>`).on('click', () => {
+                    console.log("***");
                     MirraEdit.edit(this, x => {
                         this.model('person').set({ name: x }).save();
-                    }) 
+                    })
                 });
             }
             update() {
-                console.log(this);
+                // console.log(this);
                 const [mPerson, dPerson] = this.modeldata('person');
-                console.log(dPerson.name);
+                // console.log(dPerson.name);
                 this.ui.text(dPerson.name);
             }
 
-            static createGroup() {
-                this.uiGroup = $(`<div>`);
+            static _add() {
+                // console.log(5);
+                const cls = this.constructor;
+                const p = new Person({ name: '___' });
+                // new PersonView_list({ person: p });
             }
-            static updateGroup() {
-                this.uiGroup.empty();
+
+            static createGroup() {
+                // console.log(11111111111);
+                this.uiGroup = $(`<div>`).append(
+                    $(`<button>`).text('Add').on('click', this._add)
+                );
+            }
+
+            // static async sleep(ms) {
+            //     return new Promise(resolve => setTimeout(resolve, ms));
+            // }
+
+            static async updateGroup() {
+                // console.log(2222);
+                this.uiGroup.detach('h5');
+                // this.uiGroup.append($(`<button>`).text('Adeeed').on('click', this._add));
+                // console.log(this.views);
                 this.views.forEach(view => {
+                    // console.log(view.ui);
                     this.uiGroup.append(view.ui);
+                    if (!view.ui[0].__hashcode) {
+                        view.ui[0].__hashcode = Math.random().toString(36).substr(2, 9);
+                    }
+                    // console.log(view.ui[0].__hashcode);
                 });
             }
         }
@@ -77,8 +101,8 @@
         // let p2 = new Person({ name: 'Tim P' });
         // await p1.save();
         // await p2.save();
-        // console.log(p2);
-        console.log("!", new Date().getTime());
+        // // console.log(p2);
+        // console.log("!", new Date().getTime());
 
         // Person.fetch().then(() => {
         //     Person.items().forEach(p => { new PersonView_list({person:p}) });;
@@ -91,7 +115,7 @@
 
         PersonView_list.init(Person, '#d1');
 
-        
+
         // setTimeout(() => { PersonView_list.init(Person, '#d2'); }, 3000);
 
     </script>
