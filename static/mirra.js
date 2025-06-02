@@ -18,24 +18,24 @@ class ReconnectingWebSocket {
         this.ws = new WebSocket(this.url);
 
         this.ws.onopen = () => {
-            // console.log("WebSocket connected");
+            console.log("WebSocket connected");
             this.backoff = 1000; // reset backoff
 
             // Send heartbeat pings every 30 seconds
-            this.pingInterval = setInterval(() => {
-                if (this.ws.readyState === WebSocket.OPEN) {
-                    this.ws.send(JSON.stringify({ type: "pong" })); // send pong to server ping
-                }
-            }, 30000);
+            // this.pingInterval = setInterval(() => {
+            //     if (this.ws.readyState === WebSocket.OPEN) {
+            //         // this.ws.send(JSON.stringify({ type: "pong" })); // send pong to server ping
+            //     }
+            // }, 30000);
         };
 
         this.ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            // console.log(data);
+            // console.log("&&&&&&&&&&&&", data);
             if (data.type === "ping") {
                 // Server ping received, reply pong immediately
                 if (this.ws.readyState === WebSocket.OPEN) {
-                    this.ws.send(JSON.stringify({ type: "pong" }));
+                    this.ws.send(JSON.stringify({ action: "pong" }));
                 }
             } else {
                 this.callback(data);
@@ -43,7 +43,7 @@ class ReconnectingWebSocket {
         };
 
         this.ws.onclose = () => {
-            // console.log("WebSocket closed, reconnecting...");
+            console.log("WebSocket closed, reconnecting...");
             clearInterval(this.pingInterval);
             this.reconnect();
         };
@@ -56,7 +56,7 @@ class ReconnectingWebSocket {
 
     reconnect() {
         setTimeout(() => {
-            // console.log(`Reconnecting in ${this.backoff} ms...`);
+            console.log(`Reconnecting in ${this.backoff} ms...`);
             this.connect();
             this.backoff = Math.min(this.backoff * 2, this.maxBackoff);
         }, this.backoff);
@@ -196,25 +196,6 @@ export class MirraModel {
     */
 
     static {
-        this.ws = new ReconnectingWebSocket(data => {
-            console.log("[ws]", data);
-            if (data.entity) {
-                for (const [k, v] of MirraModel.#registry) {
-                    if (data.entity.startsWith(k.itemsPath)) {
-                        switch (data.mode) {
-                            case 'create':
-                                console.log(';;');
-                                new k(data.data, data.key);
-                                break;
-                            case 'update':
-                                const o = v[data.entity.split('/')[2]];
-                                o.load();
-                                break;
-                        };
-                    }
-                }
-            }
-        });
     }
 
     static get settings() {
@@ -243,6 +224,36 @@ export class MirraModel {
             MirraModel.#registry.set(cls, {});
         }
 
+        if (!MirraModel._initialised) {
+            MirraModel.ws = new ReconnectingWebSocket(data => {
+                console.log("[ws]", data);
+                if (data.entity) {
+                    for (const [k, v] of MirraModel.#registry) {
+                        if (data.entity.startsWith(k.itemsPath)) {
+                            switch (data.mode) {
+                                case 'create':
+                                    console.log('...',data.key);
+                                    console.log(':::',MirraModel.#registry.get(cls)[data.key]);
+                                    if (!MirraModel.#registry.get(cls)[data.key]) {
+                                    console.log(';;');
+                                    new k(data.data, data.key);
+                                    }
+                                    break;
+                                case 'update':
+                                    const o = v[data.entity.split('/')[2]];
+                                    console.log("%",o);
+                                    o.load();
+                                    break;
+                            };
+                        }
+                    }
+                }
+            });
+            MirraModel._initialised = true;
+setTimeout(() => { console.log(MirraModel.#registry) }, 2000);
+        }
+
+
         if (key) {
             this.#persisted = true;
             this.#key = key;
@@ -253,9 +264,12 @@ export class MirraModel {
         MirraModel.#registry.get(cls)[this.#key] = this;
 
         if (notify) {
+            // console.log('n1');
             bus.emit(cls.itemsPath, { event: 'created', key: this.#key, data: this.#_data });
+            // console.log('n2');
         }
 
+        // console.log('pc');
     }
 
     static get type() {
@@ -333,9 +347,9 @@ export class MirraModel {
 
     }
 
-    static async new(key) {
-        new this({}, key, false).load();
-    }
+    // static async new(key) {
+    //     new this({}, key, false).load();
+    // }
 
 
     // static async fetchIfAuto() {
@@ -348,8 +362,9 @@ export class MirraModel {
 
     // get the client version of the data
     get() {
+        console.log(this);
         return {
-            ...this.#key,
+            '#key': this.#key,
             ...this.#_data
         };
     }
@@ -373,6 +388,7 @@ export class MirraModel {
         // let t = this.#_t, u = this.#_u;
         this.#data = await this._read();
 
+
         // if (t && u && (t != this.#_t || u != this.#_u)) {
         //     // handle conflicts
         //     if (confirm('remote object was updated - overwrite your changes?')) {
@@ -383,8 +399,9 @@ export class MirraModel {
         // }
         this.#persisted = true;
 
+        console.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$", this.#_data);
         // console.log(this.#data);
-
+console.log(this);
         bus.emit(this.itemPath, { event: 'updated', data: this.#_data });
     }
 
@@ -585,30 +602,13 @@ export class MirraView {
     #models;
     #ui;
     static _views = {};
-    static _uiGroup;
+    static _uiGroup = {};
 
     constructor(models = {}) {
         const cls = this.constructor;  // 🔁 Access the static context
 
         // console.log("_____", cls._initialised);
-        if (!cls._initialised) {
-            cls.createGroup();
-            // console.log("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&");
-            const expected = cls.expects();
-            for (const e in expected) {
-                console.log(expected[e].itemsPath);
-                bus.on(expected[e].itemsPath, data => {
-                    if (data.event == 'created') {
-                        console.log(expected[e].item(data.key));
-                        // console.log("!"); const cls = this.constructor; console.log(cls); 
-                        // // MirraView.new(expected[e], data.key);
-                        new cls({ [e]: expected[e].item(data.key) });
-                    }
-                });
-            }
-            // console.log(bus);
-            cls._initialised = true;
-        }
+        MirraView._init(cls);
 
         // console.log("$$$", models);
 
@@ -629,28 +629,30 @@ export class MirraView {
             }
         }
 
-        for (const m in models) {
-            bus.on(models[m].itemPath, (data) => {
-                /* console.log(models[m].itemPath, this); */
-                if (data.event == 'updated') {
-                    this.update();
-                }
-            });
-        }
-
         this.#models = models;
-        if (cls._views[this.id]) {
+        if (MirraView._views[cls][this.id]) {
             console.log("...view already exists");
         } else {
+            for (const m in models) {
+                console.log("---", models[m].itemPath);
+                bus.on(models[m].itemPath, (data) => {
+                    console.log(models[m].itemPath, this);
+                    if (data.event == 'updated') {
+                        console.log('!!! YEAH !!!');
+                        this.update();
+                    }
+                });
+            }
+
 
             console.log("$$$", this.#models);
             this.create()
             this.update(); // why not chained before work?
-            cls._views[this.id] = this;
+            MirraView._views[cls][this.id] = this;
             cls.updateGroup();
 
-            console.log(this.id);
-            console.log(cls._views);
+            // console.log(this.id);
+            // console.log(MirraView._views);
         }
     }
 
@@ -658,9 +660,46 @@ export class MirraView {
         return Object.values(this.#models).reduce((s, item) => s + item.itemPath, ":");
     }
 
-    static async init(cls, selector) {
-        await this.fetch(cls);
-        this.fill(cls);
+    static _init(cls) {
+        // console.log(cls);
+        if (!cls._initialised) {
+            if (!MirraView._views[cls]) {
+                MirraView._views[cls] = {};
+            }
+
+            cls.createGroup();
+            console.log("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&");
+            const expected = cls.expects();
+            for (const e in expected) {
+                console.log(expected[e].itemsPath);
+                bus.on(expected[e].itemsPath, data => {
+                    if (data.event == 'created') {
+                        // console.log(expected[e].item(data.key));
+                        // console.log("!"); 
+                        //const cls = this.constructor; 
+                        // console.log(cls); 
+                        // // MirraView.new(expected[e], data.key);
+                        if (MirraView._views[cls][data.key]) {
+                            console.log("...view already exists!!!");
+                        } else {
+                            new cls({ [e]: expected[e].item(data.key) });
+                        }
+                    }
+                });
+            }
+            // console.log(bus);
+            cls._initialised = true;
+        }
+
+    }
+
+    static async init(cls, selector, fetch = true) {
+        MirraView._init(this);
+
+        if (fetch) {
+            await this.fetch(cls);
+        }
+        // this.fill(cls);
         this.to(selector);
     }
 
@@ -680,20 +719,21 @@ export class MirraView {
         await cls.fetch();
     }
 
-    static fill(cls) {
-        const type = Object.keys(this.expects())[0];
-        // console.log(type);
+    // static fill(cls) {
+    //     const type = Object.keys(this.expects())[0];
+    //     // console.log(type);
+    //     // console.log("###", cls.constructor.name, cls.items());
 
-        cls.items().forEach(item => {
-            // const data = {};
-            // data[type] = item;
-            // // console.log(data);
-            // // console.log({ [type] : item });
-            new this({ [type]: item });
-        });
+    //     cls.items().forEach(item => {
+    //         // const data = {};
+    //         // data[type] = item;
+    //         // // console.log(data);
+    //         // // console.log({ [type] : item });
+    //         new this({ [type]: item });
+    //     });
 
-        // this.updateGroup();
-    }
+    //     // this.updateGroup();
+    // }
 
     static to(selector) {
         // const cls = this.constructor;
@@ -708,24 +748,24 @@ export class MirraView {
     }
 
     static get uiGroup() {
-        if (!this._uiGroup) {
+        if (!MirraView._uiGroup[this]) {
             this.createGroup();
         }
-        return this._uiGroup;
+        return MirraView._uiGroup[this];
     }
     static set uiGroup(uiGroup) {
-        this._uiGroup = uiGroup;
+        MirraView._uiGroup[this] = uiGroup;
     }
 
     static get views() {
-        return Object.values(this._views);
+        return Object.values(MirraView._views[this] ?? {});
     }
 
     model(name) {
         return this.#models[name];
     }
     data(name) {
-        // console.log(this.#models);
+        console.log(this.#models);
         return this.#models[name].get();
     }
     modeldata(name) {
@@ -737,7 +777,7 @@ export class MirraView {
     }
 
     static createGroup() {
-        this._uiGroup = $();
+        this.uiGroup = $();
     }
     static updateGroup() {
         // console.log(1111);
@@ -749,6 +789,7 @@ export class MirraView {
         return this;
     }
     update() {
+        console.log("*1*");
         return this;
     }
 
@@ -868,6 +909,8 @@ function emitter() {
 
     return {
         on(type, handler) {
+            console.log("%%%%%%%", type);
+            // console.trace();
             if (type.includes('*')) {
                 const regex = patternToRegex(type);
                 wildcardHandlers.push({ pattern: type, regex, handler });
@@ -877,7 +920,7 @@ function emitter() {
                     // if (!seenEventIds.has(event._eventId)) {
                     console.log("!", event, type);
                     handler(event, type);
-                    seenEventIds.add(event._eventId);
+                    // seenEventIds.add(event._eventId);
                     // }
                 });
             }
@@ -897,7 +940,7 @@ function emitter() {
         emit(type, event) {
             // Assign or get unique event id
             event._eventId = getEventId(type, event);
-            // if (seenEventIds.has(eventId)) {
+            // if (seenEventIds.has(event._eventId)) {
             //     // Already handled this event, skip
             //     return;
             // }
@@ -915,3 +958,6 @@ function emitter() {
     };
 }
 export const bus = emitter();
+
+
+

@@ -102,45 +102,45 @@ manager = ConnectionManager()
 #             await asyncio.sleep(30)
 #     asyncio.create_task(ping_loop())
 
-users_collection = db["users"]
+# users_collection = db["users"]
 
-class User(BaseModel):
-    name: str
-    age: int
+# class User(BaseModel):
+#     name: str
+#     age: int
 
 
-@app.post("/users")
-async def add_user(user: User):
-    users_collection.insert_one(user.model_dump())
-    await manager.send_json({"event": "new_user", "user": user.model_dump()})
-    return {"status": "ok"}
+# @app.post("/users")
+# async def add_user(user: User):
+#     users_collection.insert_one(user.model_dump())
+#     await manager.send_json({"event": "new_user", "user": user.model_dump()})
+#     return {"status": "ok"}
 
-@app.get("/users", response_model=List[User])
-def get_users():
-    return list(users_collection.find({}, {"_id": 0}))
+# @app.get("/users", response_model=List[User])
+# def get_users():
+#     return list(users_collection.find({}, {"_id": 0}))
 
-@app.get("/users/{user_id}", response_model=User)
-async def get_user(user_id: str):
-    user_data = users_collection.find_one({"_id": user_id})
-    if user_data:
-        return User(**user_data)
-    return {"status": "not_found"}
+# @app.get("/users/{user_id}", response_model=User)
+# async def get_user(user_id: str):
+#     user_data = users_collection.find_one({"_id": user_id})
+#     if user_data:
+#         return User(**user_data)
+#     return {"status": "not_found"}
 
-@app.delete("/users/{user_id}")
-async def delete_user(user_id: str):
-    result = users_collection.delete_one({"_id": user_id})
-    if result.deleted_count > 0:
-        await manager.send_json({"event": "delete_user", "user_id": user_id})
-        return {"status": "ok"}
-    return {"status": "not_found"}
+# @app.delete("/users/{user_id}")
+# async def delete_user(user_id: str):
+#     result = users_collection.delete_one({"_id": user_id})
+#     if result.deleted_count > 0:
+#         await manager.send_json({"event": "delete_user", "user_id": user_id})
+#         return {"status": "ok"}
+#     return {"status": "not_found"}
 
-@app.put("/users/{user_id}")
-async def update_user(user_id: str, user: User):
-    result = users_collection.update_one({"_id": user_id}, {"$set": user.model_dump()})
-    if result.modified_count > 0:
-        await manager.send_json({"event": "update_user", "user": user.dict()})
-        return {"status": "ok"}
-    return {"status": "not_found"}
+# @app.put("/users/{user_id}")
+# async def update_user(user_id: str, user: User):
+#     result = users_collection.update_one({"_id": user_id}, {"$set": user.model_dump()})
+#     if result.modified_count > 0:
+#         await manager.send_json({"event": "update_user", "user": user.dict()})
+#         return {"status": "ok"}
+#     return {"status": "not_found"}
 
 
 
@@ -323,16 +323,4 @@ person_crud = CRUDRouterFactory(Person, persons_collection, "persons")
 app.include_router(person_crud.get_router("/persons"))
 
 
-
-
-
-blahs_collection = db["blah"]
-
-class Blah(MirraModel):
-    a: str
-    b: int
-    c: bool
-
-blah_crud = CRUDRouterFactory(Blah, blahs_collection, "blahs")
-app.include_router(blah_crud.get_router("/blahs"))
 

@@ -7,8 +7,8 @@
 <body>
     Hiii4
 
-    <div id="d1"></div>
-    <div id="d2"></div>
+    <div id="d1" style="float:left"></div>
+    <div id="d2" style="float:right"></div>
 
     <script type="module">
 
@@ -55,21 +55,27 @@
                 });
             }
             update() {
-                // console.log(this);
-                const [mPerson, dPerson] = this.modeldata('person');
-                // console.log(dPerson.name);
+                console.log("*2*");
+
+                // console.trace();
+                console.log(this);
+                // const [mPerson, dPerson] = this.modeldata('person');
+                const mPerson = this.model('person');
+                const dPerson = this.data('person');
+                console.log(dPerson);
+                // console.log(this.ui);
                 this.ui.text(dPerson.name);
             }
 
             static _add() {
-                // console.log(5);
+                console.log(this.views);
                 const cls = this.constructor;
                 const p = new Person({ name: '___' });
                 // new PersonView_list({ person: p });
             }
 
             static createGroup() {
-                // console.log(11111111111);
+                console.log(11111111111);
                 this.uiGroup = $(`<div>`).append(
                     $(`<button>`).text('Add').on('click', this._add)
                 );
@@ -83,7 +89,7 @@
                 // console.log(2222);
                 this.uiGroup.detach('h5');
                 // this.uiGroup.append($(`<button>`).text('Adeeed').on('click', this._add));
-                // console.log(this.views);
+                console.log(this.views);
                 this.views.forEach(view => {
                     // console.log(view.ui);
                     this.uiGroup.append(view.ui);
@@ -116,7 +122,66 @@
         PersonView_list.init(Person, '#d1');
 
 
-        // setTimeout(() => { PersonView_list.init(Person, '#d2'); }, 3000);
+
+
+
+        // class PersonView2_list extends MirraView {
+        //     static expects() {
+        //         return { person: Person }    // name of model and its class
+        //     }
+
+        //     create() {
+        //         this.ui = $(`<h5 class='editable'>`).on('click', () => {
+        //             console.log("***");
+        //             MirraEdit.edit(this, x => {
+        //                 this.model('person').set({ name: x }).save();
+        //             })
+        //         });
+        //     }
+        //     update() {
+        //         // console.log(this);
+        //         const [mPerson, dPerson] = this.modeldata('person');
+        //         // console.log(dPerson.name);
+        //         this.ui.text(dPerson.name);
+        //     }
+
+        //     static _add() {
+        //         console.log(5);
+        //         const cls = this.constructor;
+        //         const p = new Person({ name: '___' });
+        //         // new PersonView_list({ person: p });
+        //     }
+
+        //     static createGroup() {
+        //         // console.log(11111111111);
+        //         this.uiGroup = $(`<div>`).append(
+        //             $(`<button>`).text('Add').on('click', this._add)
+        //         );
+        //     }
+
+        //     // static async sleep(ms) {
+        //     //     return new Promise(resolve => setTimeout(resolve, ms));
+        //     // }
+
+        //     static async updateGroup() {
+        //         // console.log(2222);
+        //         this.uiGroup.detach('h5');
+        //         // this.uiGroup.append($(`<button>`).text('Adeeed').on('click', this._add));
+        //         console.log(this.views);
+        //         this.views.forEach(view => {
+        //             // console.log(view.ui);
+        //             this.uiGroup.append(view.ui);
+        //             if (!view.ui[0].__hashcode) {
+        //                 view.ui[0].__hashcode = Math.random().toString(36).substr(2, 9);
+        //             }
+        //             // console.log(view.ui[0].__hashcode);
+        //         });
+        //     }
+        // }
+        // PersonView2_list.init(Person, '#d2', false);
+
+
+        // setTimeout(() => { PersonView2_list.init(Person, '#d2', false); }, 1000);
 
     </script>
 
