@@ -244,6 +244,11 @@ export class MirraModel {
                                     console.log("%",o);
                                     o.load();
                                     break;
+                                case 'delete':
+                                    const od = v[data.entity.split('/')[2]];
+                                    console.log("%",od);
+                                    od.load();
+                                    break;
                             };
                         }
                     }
@@ -341,10 +346,12 @@ setTimeout(() => { console.log(MirraModel.#registry) }, 2000);
     // }
 
 
-    static async fetch() {
-        // load all records
-        await this._fetch();
-
+    static async fetch(initial = false) {
+        if (!initial || !this._fetched) {
+            console.log('FETCHING!!!');
+            this._fetched = true;
+            await this._fetch();
+        }
     }
 
     // static async new(key) {
@@ -641,6 +648,10 @@ export class MirraView {
                         console.log('!!! YEAH !!!');
                         this.update();
                     }
+                    if (data.event == 'deleted') {
+                        console.log('!!! NAH !!!');
+                        this.update();
+                    }
                 });
             }
 
@@ -693,12 +704,10 @@ export class MirraView {
 
     }
 
-    static async init(cls, selector, fetch = true) {
+    static async init(cls, selector) {
         MirraView._init(this);
 
-        if (fetch) {
-            await this.fetch(cls);
-        }
+        this.fetch(cls, true);
         // this.fill(cls);
         this.to(selector);
     }
@@ -715,8 +724,8 @@ export class MirraView {
     //     cls.fill(cls);
     // }
 
-    static async fetch(cls) {
-        await cls.fetch();
+    static async fetch(cls, initial = false) {
+        await cls.fetch(initial);
     }
 
     // static fill(cls) {
@@ -810,7 +819,8 @@ export class MirraView {
 
 
 export class MirraEdit {
-    static edit(view, callback) {
+    static edit(view, callback, deleteCallback) {
+                console.log(deleteCallback);
         const o = $(view.ui.closest('.editable'));
         // console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%",view,o);
         o.data('_cval', o.text());
@@ -831,6 +841,12 @@ export class MirraEdit {
                     o.attr('contenteditable', false);
                     e.preventDefault();
                 }
+                if (deleteCallback && e.key === "Delete" && e.shiftKey) {
+                    console.log("*");
+                    o.text(o.data('_cval'));
+                    o.attr('contenteditable', false);
+                    deleteCallback();
+                }
             });
             o.on('keypress', (e) => {
                 if (e.key === "Enter") {
@@ -842,6 +858,41 @@ export class MirraEdit {
             o.data('_minit', true);
         }
     }
+    // static delete(view, callback) {
+    //     const o = $(view.ui.closest('.editable'));
+    //     // console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%",view,o);
+    //     o.data('_cval', o.text());
+
+    //     o.addClass('deleted');
+
+    //     if (!o.data('_minit')) {
+    //         o.on('blur', () => {
+    //             o.attr('contenteditable', false);
+    //             if (o.text() != o.data('_cval')) {
+    //                 // console.log(callback);
+    //                 callback(o.text());
+    //             }
+    //         });
+    //         o.on('keydown', (e) => {
+    //             if (e.key === "Escape") {
+    //                 o.text(o.data('_cval'));
+    //                 o.attr('contenteditable', false);
+    //                 e.preventDefault();
+    //             }
+    //             if (e.key === "Delete" && e.ctrlKey) {
+    //                 console.log("DELETE");
+    //             }
+    //         });
+    //         o.on('keypress', (e) => {
+    //             if (e.key === "Enter") {
+    //                 o.blur();
+    //                 e.preventDefault();
+    //             }
+    //         });
+
+    //         o.data('_minit', true);
+    //     }
+    // }
 }
 
 

@@ -226,10 +226,14 @@ class CRUDRouterFactory:
         def get_all_items(
             skip: int = Query(0, ge=0),
             limit: int = Query(50, le=100),
+            deleted: bool = False,
             sort: Optional[str] = Query(None, description="Comma-separated list of fields. Prefix with '-' for descending."),
             filters: Dict[str, Any] = Depends(self._build_filter_query)
         ):
             sort_clause = self._parse_sort(sort)
+            if not deleted:
+                filters = filters.copy() if filters else {}
+                filters["_x"] = False
             cursor = collection.find(filters).skip(skip).limit(limit)
             if sort_clause:
                 cursor = cursor.sort(sort_clause)
@@ -263,9 +267,13 @@ class CRUDRouterFactory:
             deleted_doc = collection.find_one({"_id": item_id})
             if not deleted_doc:
                 raise HTTPException(status_code=404, detail="Item not found")
-            result = collection.delete_one({"_id": item_id})
-            if result.deleted_count == 0:
+            # result = collection.delete_one({"_id": item_id})
+            print (deleted_doc)
+            deleted_doc["_x"] = True
+            result = collection.update_one({"_id": item_id}, {"$set": deleted_doc})
+            if result.matched_count == 0:
                 raise HTTPException(status_code=404, detail="Item not found")
+            deleted_doc = collection.find_one({"_id": item_id})
             item = Model.model_validate(deleted_doc)
             await manager.send_json({
                 "entity": f"{route_prefix}/{item_id}",
