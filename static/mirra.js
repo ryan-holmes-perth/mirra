@@ -232,21 +232,21 @@ export class MirraModel {
                         if (data.entity.startsWith(k.itemsPath)) {
                             switch (data.mode) {
                                 case 'create':
-                                    console.log('...',data.key);
-                                    console.log(':::',MirraModel.#registry.get(cls)[data.key]);
+                                    console.log('...', data.key);
+                                    console.log(':::', MirraModel.#registry.get(cls)[data.key]);
                                     if (!MirraModel.#registry.get(cls)[data.key]) {
-                                    console.log(';;');
-                                    new k(data.data, data.key);
+                                        console.log(';;');
+                                        new k(data.data, data.key);
                                     }
                                     break;
                                 case 'update':
                                     const o = v[data.entity.split('/')[2]];
-                                    console.log("%",o);
+                                    console.log("%", o);
                                     o.load();
                                     break;
                                 case 'delete':
                                     const od = v[data.entity.split('/')[2]];
-                                    console.log("%",od);
+                                    console.log("%", od);
                                     od.load();
                                     break;
                             };
@@ -255,7 +255,7 @@ export class MirraModel {
                 }
             });
             MirraModel._initialised = true;
-setTimeout(() => { console.log(MirraModel.#registry) }, 2000);
+            setTimeout(() => { console.log(MirraModel.#registry) }, 2000);
         }
 
 
@@ -380,6 +380,7 @@ setTimeout(() => { console.log(MirraModel.#registry) }, 2000);
     set(data) {
         // chaining method to enable a .save() on the back of it
         this.#_data = {
+            ...this.#_data,
             ...data,
             _t: Date.now(),
             _u: browserId(),
@@ -408,7 +409,7 @@ setTimeout(() => { console.log(MirraModel.#registry) }, 2000);
 
         console.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$", this.#_data);
         // console.log(this.#data);
-console.log(this);
+        console.log(this);
         bus.emit(this.itemPath, { event: 'updated', data: this.#_data });
     }
 
@@ -819,9 +820,9 @@ export class MirraView {
 
 
 export class MirraEdit {
-    static edit(view, callback, deleteCallback) {
-                console.log(deleteCallback);
-        const o = $(view.ui.closest('.editable'));
+    static edit(elem, callback, deleteCallback) {
+        console.log(deleteCallback);
+        const o = $($(elem).closest('.editable'));
         // console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%",view,o);
         o.data('_cval', o.text());
 

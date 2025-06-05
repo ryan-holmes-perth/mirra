@@ -173,9 +173,7 @@ async def add_person(person: Person):
     result = persons_collection.insert_one(doc)
 
     person.id = str(result.inserted_id)
-
     saved_doc = persons_collection.find_one({"_id": result.inserted_id})
-
     person = Person.model_validate(saved_doc)
 
     await manager.send_json({

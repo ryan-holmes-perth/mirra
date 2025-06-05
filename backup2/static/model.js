@@ -234,7 +234,7 @@ export class MirraModel {
             });
         }
     }
-
+ 
     async #create(data) {
         // console.log({
         //     method: "POST",
