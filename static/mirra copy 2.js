@@ -1,5 +1,4 @@
 import { DateTime, Duration } from 'https://esm.sh/luxon';
-import { html, LitElement } from 'https://esm.sh/lit';
 import $ from 'https://esm.sh/jquery';
 import mitt from 'https://esm.sh/mitt';
 
@@ -607,49 +606,8 @@ export class MirraModelMongoDB extends MirraModel {
 // }
 
 
-export class MirraView extends LitElement {
-    //         constructor(models = {}) {
-    //             super();
-    //         }
 
-    #ls = {};
-
-    willUpdate(changedProperties) {
-        const cls = this.constructor;
-        for (let t in cls.properties) {
-            console.log(t, this[t]?.itemPath, () => this.requestUpdate());
-            if (this[t]?.itemPath) {
-                if (changedProperties.has(t)) {
-                    if (this[t].itemPath !== this.#ls[t]) {
-                        // Remove old listener and add new one
-                        if (this.#ls[t]) {
-                            bus.off(this.#ls[t], () => this.requestUpdate());
-                        }
-                        this.#ls[t] = this[t].itemPath;
-                        bus.on(this.#ls[t], () => this.requestUpdate());
-                    }
-                }
-            }
-        }
-    }
-
-    disconnectedCallback() {
-        const cls = this.constructor;
-        for (let t in cls.properties) {
-            if (this.#ls[t]) {
-                bus.off(this.#ls[t], () => this.requestUpdate());
-            }
-        }
-        super.disconnectedCallback();
-    }
-
-    render() {
-        return html`<p>Hello, world!</p>`;
-    }
-}
-
-
-export class __MirraView {
+export class MirraView {
     #models;
     #ui;
     static #tabIndex = 100;
@@ -1052,7 +1010,7 @@ function emitter() {
 
     return {
         on(type, handler) {
-            console.log("%%%%%%%", type, handler);
+            // console.log.log("%%%%%%%", type);
             // console.trace();
             if (type.includes('*')) {
                 const regex = patternToRegex(type);
@@ -1061,7 +1019,7 @@ function emitter() {
                 base.on(type, (event) => {
                     // Only fire if this event id hasn't been seen
                     // if (!seenEventIds.has(event._eventId)) {
-                    console.log("!", event, type, handler);
+                    // console.log.log("!", event, type);
                     handler(event, type);
                     // seenEventIds.add(event._eventId);
                     // }

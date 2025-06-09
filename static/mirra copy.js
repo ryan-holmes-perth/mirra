@@ -1,5 +1,4 @@
 import { DateTime, Duration } from 'https://esm.sh/luxon';
-import { html, LitElement } from 'https://esm.sh/lit';
 import $ from 'https://esm.sh/jquery';
 import mitt from 'https://esm.sh/mitt';
 
@@ -19,7 +18,7 @@ class ReconnectingWebSocket {
         this.ws = new WebSocket(this.url);
 
         this.ws.onopen = () => {
-            // console.log.log("WebSocket connected");
+            console.log("WebSocket connected");
             this.backoff = 1000; // reset backoff
 
             // Send heartbeat pings every 30 seconds
@@ -44,20 +43,20 @@ class ReconnectingWebSocket {
         };
 
         this.ws.onclose = () => {
-            // console.log.log("WebSocket closed, reconnecting...");
+            console.log("WebSocket closed, reconnecting...");
             clearInterval(this.pingInterval);
             this.reconnect();
         };
 
         this.ws.onerror = (err) => {
-            // console.log.error("WebSocket error", err);
+            console.error("WebSocket error", err);
             this.ws.close();
         };
     }
 
     reconnect() {
         setTimeout(() => {
-            // console.log.log(`Reconnecting in ${this.backoff} ms...`);
+            console.log(`Reconnecting in ${this.backoff} ms...`);
             this.connect();
             this.backoff = Math.min(this.backoff * 2, this.maxBackoff);
         }, this.backoff);
@@ -227,27 +226,27 @@ export class MirraModel {
 
         if (!MirraModel._initialised) {
             MirraModel.ws = new ReconnectingWebSocket(data => {
-                // console.log.log("[ws]", data);
+                console.log("[ws]", data);
                 if (data.entity) {
                     for (const [k, v] of MirraModel.#registry) {
                         if (data.entity.startsWith(k.itemsPath)) {
                             switch (data.mode) {
                                 case 'create':
-                                    // console.log.log('...', data.key);
-                                    // console.log.log(':::', MirraModel.#registry.get(cls)[data.key]);
+                                    console.log('...', data.key);
+                                    console.log(':::', MirraModel.#registry.get(cls)[data.key]);
                                     if (!MirraModel.#registry.get(cls)[data.key]) {
-                                        // console.log.log(';;');
+                                        console.log(';;');
                                         new k(data.data, data.key);
                                     }
                                     break;
                                 case 'update':
                                     const o = v[data.entity.split('/')[2]];
-                                    // console.log.log("%", o);
+                                    console.log("%", o);
                                     o.load();
                                     break;
                                 case 'delete':
                                     const od = v[data.entity.split('/')[2]];
-                                    // console.log.log("%", od);
+                                    console.log("%", od);
                                     od.load();
                                     break;
                             };
@@ -349,7 +348,7 @@ export class MirraModel {
 
     static async fetch(initial = false) {
         if (!initial || !this._fetched) {
-            // console.log.log('FETCHING!!!');
+            console.log('FETCHING!!!');
             this._fetched = true;
             await this._fetch();
         }
@@ -370,7 +369,7 @@ export class MirraModel {
 
     // get the client version of the data
     get() {
-        // console.log.log(this);
+        console.log(this);
         return {
             '#key': this.#key,
             ...this.#_data
@@ -408,9 +407,9 @@ export class MirraModel {
         // }
         this.#persisted = true;
 
-        // console.log.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$", this.#_data);
+        console.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$", this.#_data);
         // console.log(this.#data);
-        // console.log.log(this);
+        console.log(this);
         bus.emit(this.itemPath, { event: 'updated', data: this.#_data });
     }
 
@@ -491,7 +490,6 @@ export class MirraModelMongoDB extends MirraModel {
         }
     }
     async _create(data) {
-
         const result = await fetch("/" + this.type, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -607,52 +605,10 @@ export class MirraModelMongoDB extends MirraModel {
 // }
 
 
-export class MirraView extends LitElement {
-    //         constructor(models = {}) {
-    //             super();
-    //         }
 
-    #ls = {};
-
-    willUpdate(changedProperties) {
-        const cls = this.constructor;
-        for (let t in cls.properties) {
-            console.log(t, this[t]?.itemPath, () => this.requestUpdate());
-            if (this[t]?.itemPath) {
-                if (changedProperties.has(t)) {
-                    if (this[t].itemPath !== this.#ls[t]) {
-                        // Remove old listener and add new one
-                        if (this.#ls[t]) {
-                            bus.off(this.#ls[t], () => this.requestUpdate());
-                        }
-                        this.#ls[t] = this[t].itemPath;
-                        bus.on(this.#ls[t], () => this.requestUpdate());
-                    }
-                }
-            }
-        }
-    }
-
-    disconnectedCallback() {
-        const cls = this.constructor;
-        for (let t in cls.properties) {
-            if (this.#ls[t]) {
-                bus.off(this.#ls[t], () => this.requestUpdate());
-            }
-        }
-        super.disconnectedCallback();
-    }
-
-    render() {
-        return html`<p>Hello, world!</p>`;
-    }
-}
-
-
-export class __MirraView {
+export class MirraView {
     #models;
     #ui;
-    static #tabIndex = 100;
     static _views = {};
     static _uiGroup = {};
 
@@ -683,25 +639,25 @@ export class __MirraView {
 
         this.#models = models;
         if (MirraView._views[cls][this.id]) {
-            // console.log.log("...view already exists");
+            console.log("...view already exists");
         } else {
             for (const m in models) {
-                // console.log.log("---", models[m].itemPath);
+                console.log("---", models[m].itemPath);
                 bus.on(models[m].itemPath, (data) => {
-                    // console.log.log(models[m].itemPath, this);
+                    console.log(models[m].itemPath, this);
                     if (data.event == 'updated') {
-                        // console.log.log('!!! YEAH !!!');
+                        console.log('!!! YEAH !!!');
                         this.update();
                     }
                     if (data.event == 'deleted') {
-                        // console.log.log('!!! NAH !!!');
+                        console.log('!!! NAH !!!');
                         this.update();
                     }
                 });
             }
 
 
-            // console.log.log("$$$", this.#models);
+            console.log("$$$", this.#models);
             this.create()
             this.update(); // why not chained before work?
             MirraView._views[cls][this.id] = this;
@@ -724,10 +680,10 @@ export class __MirraView {
             }
 
             cls.createGroup();
-            // console.log.log("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&");
+            console.log("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&");
             const expected = cls.expects();
             for (const e in expected) {
-                // console.log.log(expected[e].itemsPath);
+                console.log(expected[e].itemsPath);
                 bus.on(expected[e].itemsPath, data => {
                     if (data.event == 'created') {
                         // console.log(expected[e].item(data.key));
@@ -736,7 +692,7 @@ export class __MirraView {
                         // console.log(cls); 
                         // // MirraView.new(expected[e], data.key);
                         if (MirraView._views[cls][data.key]) {
-                            // console.log.log("...view already exists!!!");
+                            console.log("...view already exists!!!");
                         } else {
                             new cls({ [e]: expected[e].item(data.key) });
                         }
@@ -791,9 +747,7 @@ export class __MirraView {
 
     static to(selector) {
         // const cls = this.constructor;
-        // console.log.log(this.uiGroup, $(selector));
         this.uiGroup.appendTo(selector);
-        // console.log.log(this.uiGroup, $(selector));
     }
 
     get ui() {
@@ -821,7 +775,7 @@ export class __MirraView {
         return this.#models[name];
     }
     data(name) {
-        // console.log.log(this.#models);
+        console.log(this.#models);
         return this.#models[name].get();
     }
     modeldata(name) {
@@ -845,7 +799,7 @@ export class __MirraView {
         return this;
     }
     update() {
-        // console.log.log("*1*");
+        console.log("*1*");
         return this;
     }
 
@@ -861,67 +815,22 @@ export class __MirraView {
         this.ui.remove();
         return this;
     }
-
-    editable(modelId, modelProperty, config = {}) {
-        let $ui;
-        switch (config.type) {
-            case 'select':
-                const $sel = $('<select>')
-                    .addClass('s-mediaType')
-                    .val(this.data(modelId)[modelProperty] || '')
-                    .on('change', (e) => {
-                        const val = $(e.target).val();
-                        this.model(modelId).set({ [modelProperty]: val }).save();
-                    })
-                    ;
-                for (let k of Object.keys(config.options)) {
-                    const v = config.options[k];
-                    // console.log.log(k, v);
-                    $sel.append($(`<option value="${k}">${v}</option>`));
-                }
-                $ui = $('<div>').append($sel);
-                $ui.attr('tabIndex', ++MirraView.#tabIndex);
-                break;
-            default:
-                $ui = $(config.html ?? '<div>')
-                    .addClass('editable')
-                    .on('focus',
-                        (e) => {
-                            MirraEdit.edit(e.target,
-                                x => {
-                                    this.model(modelId).set({ [modelProperty]: x }).save();
-                                }
-                            )
-                        }
-                    )
-                    ;
-                $ui.attr('tabIndex', ++MirraView.#tabIndex);
-                break;
-        }
-        return $ui;
-    }
 }
 
 
 
 export class MirraEdit {
     static edit(elem, callback, deleteCallback) {
-        // console.log.log(deleteCallback);
+        console.log(deleteCallback);
         const o = $($(elem).closest('.editable'));
+        // console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%",view,o);
         o.data('_cval', o.text());
 
-        o.attr('contenteditable', true);
-        if (!o.is(":focus")) {   // prevents infinite event loop
-            o.focus();
-        }
-        // setTimeout(() => {
-        setCursorToStartIfNone(o[0]);
-        //  }, 1000);
+        o.attr('contenteditable', true).focus();
 
         if (!o.data('_minit')) {
             o.on('blur', () => {
                 o.attr('contenteditable', false);
-                o[0].scrollLeft = 0;
                 if (o.text() != o.data('_cval')) {
                     // console.log(callback);
                     callback(o.text());
@@ -934,7 +843,7 @@ export class MirraEdit {
                     e.preventDefault();
                 }
                 if (deleteCallback && e.key === "Delete" && e.shiftKey) {
-                    // console.log.log("*");
+                    console.log("*");
                     o.text(o.data('_cval'));
                     o.attr('contenteditable', false);
                     deleteCallback();
@@ -1052,7 +961,7 @@ function emitter() {
 
     return {
         on(type, handler) {
-            console.log("%%%%%%%", type, handler);
+            console.log("%%%%%%%", type);
             // console.trace();
             if (type.includes('*')) {
                 const regex = patternToRegex(type);
@@ -1061,7 +970,7 @@ function emitter() {
                 base.on(type, (event) => {
                     // Only fire if this event id hasn't been seen
                     // if (!seenEventIds.has(event._eventId)) {
-                    console.log("!", event, type, handler);
+                    console.log("!", event, type);
                     handler(event, type);
                     // seenEventIds.add(event._eventId);
                     // }
@@ -1103,23 +1012,4 @@ function emitter() {
 export const bus = emitter();
 
 
-
-function setCursorToStartIfNone(contentEditableElement) {
-    const selection = window.getSelection();
-
-    if (contentEditableElement) {
-        // If selection is not inside the element or is collapsed outside it
-        if (
-            !selection.rangeCount ||
-            !contentEditableElement.contains(selection.anchorNode)
-        ) {
-            const range = document.createRange();
-            range.setStart(contentEditableElement, 0);
-            range.collapse(true); // collapse to start
-
-            selection.removeAllRanges();
-            selection.addRange(range);
-        }
-    }
-}
 
