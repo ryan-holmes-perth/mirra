@@ -173,6 +173,110 @@ export class MirraSettings {
 }
 
 
+
+export class MirraConsumer {
+    #cls;
+    #callback;
+    #sort;
+    #filter;
+    #items;
+
+    constructor(cls, callback = null, sort = null, filter = null) {
+        this.#cls = cls;
+        this.#callback = callback;
+        this.#sort = sort;
+        this.#filter = filter;
+
+        bus.on(cls.itemsPath, () => this.provide());
+        bus.on(cls.itemPaths + "/*", () => this.provide());
+
+        this.provide();
+    }
+
+    setCallback(callback) {
+        this.#callback = callback;
+    }
+
+    async provide() {
+        console.log(this);
+        await this.#cls.fetch(true);
+        this.#items = this.#cls.map()
+        // console.log(this.#items);
+        this.#items = this._filter(this.#items, 'and', this.#filter);
+        // this._sort();
+        if (this.#callback) this.#callback(this.#items);
+    }
+
+    _filter(items, type, value) {
+        let result = {};
+        switch (type) {
+            case 'or':
+                for (let v in value) {
+                    result = {
+                        ...result,
+                        ...this._filter(items, v, value[v])
+                    };
+                }
+                break;
+            case 'and':
+                result = items;
+                for (let v in value) {
+                    let andMap = this._filter(items, v, value[v]);
+                    for (let r in result) {
+                        if (!(r in andMap)) {
+                            delete result[r];
+                        }
+                    }
+                }
+                break;
+            case 'not':
+                result = items;
+                for (let v in value) {
+                    let notMap = this._filter(items, v, value[v]);
+                    for (let n in notMap) {
+                        delete result[n];
+                    }
+                }
+                // console.log(result);
+                break;
+            default:
+                for (let i in items) {
+                    let itemValue = items[i].get()[type];
+
+                    switch (typeof value) {
+                        case 'string':
+                            if (itemValue == value) {
+                                result[i] = items[i];
+                            }
+                            break;
+                        case 'number':
+                            if (itemValue == value) {
+                                result[i] = items[i];
+                            }
+                            break;
+                        case 'object':
+                            if (value instanceof RegExp) {
+                                if (itemValue.match(value)) {
+                                    result[i] = items[i];
+                                }
+                            } else if (value instanceof Array && value.length == 2) {
+                                if (itemValue >= value[0] && itemValue <= value[1]) {
+                                    result[i] = items[i];
+                                }
+                            }
+                            break;
+                    }
+                }
+                break;
+        }
+        return result;
+    }
+
+    _sort() {
+    }
+}
+
+
 export class MirraModel {
 
     static #settings = new MirraSettings();
@@ -215,6 +319,10 @@ export class MirraModel {
 
     static items() {
         return Object.values(MirraModel.#getItems(this) ?? {});
+    }
+
+    static map() {
+        return MirraModel.#getItems(this) ?? {};
     }
 
     constructor(data = this.default, key = null, notify = true) {
@@ -354,6 +462,27 @@ export class MirraModel {
             await this._fetch();
         }
     }
+
+
+
+
+
+    // static #consumers = new Map();
+
+    // // static #getItems(cls) {
+    // //     return MirraModel.#registry.get(cls);
+    // // }
+
+    // static provide(consumer) {
+    //     const cls = this.constructor;
+
+    //     if (!MirraModel.#consumers.get(cls)) {
+    //         MirraModel.#consumers.set(cls, []);
+    //     }
+    //     let consumers = MirraModel.#consumers.get(cls);
+
+    //     consumers.push(consumer);        
+    // }
 
     // static async new(key) {
     //     new this({}, key, false).load();
@@ -613,20 +742,29 @@ export class MirraView extends LitElement {
     //         }
 
     #ls = {};
+    static #tabIndex = 100;
+
+
 
     willUpdate(changedProperties) {
         const cls = this.constructor;
         for (let t in cls.properties) {
-            console.log(t, this[t]?.itemPath, () => this.requestUpdate());
-            if (this[t]?.itemPath) {
-                if (changedProperties.has(t)) {
-                    if (this[t].itemPath !== this.#ls[t]) {
-                        // Remove old listener and add new one
-                        if (this.#ls[t]) {
-                            bus.off(this.#ls[t], () => this.requestUpdate());
+            if (t === 'consumers') {
+                this[t]?.forEach(consumer => {
+                    consumer.setCallback(() => this.requestUpdate());
+                });
+            } else {
+                console.log(t, this[t]?.itemPath, () => this.requestUpdate());
+                if (this[t]?.itemPath) {
+                    if (changedProperties.has(t)) {
+                        if (this[t].itemPath !== this.#ls[t]) {
+                            // Remove old listener and add new one
+                            if (this.#ls[t]) {
+                                bus.off(this.#ls[t], () => this.requestUpdate());
+                            }
+                            this.#ls[t] = this[t].itemPath;
+                            bus.on(this.#ls[t], () => this.requestUpdate());
                         }
-                        this.#ls[t] = this[t].itemPath;
-                        bus.on(this.#ls[t], () => this.requestUpdate());
                     }
                 }
             }
@@ -645,6 +783,49 @@ export class MirraView extends LitElement {
 
     render() {
         return html`<p>Hello, world!</p>`;
+    }
+
+    editable(model, modelProperty, config = {}) {
+        const value = model.get()?.[modelProperty] || '';
+        console.log(value);
+        const tabIndex = ++MirraView.#tabIndex;
+
+        if (config.type === 'select') {
+            return html`
+                <div tabIndex=${tabIndex}>
+                    <select
+                    class="s-mediaType"
+                    .value=${value}
+                    @change=${(e) => {
+                    const val = e.target.value;
+                    model.set({ [modelProperty]: val }).save();
+                }}
+                    >
+                    ${Object.entries(config.options).map(
+                    ([k, v]) => html`<option value=${k}>${v}</option>`
+                )}
+                    </select>
+                </div>
+            `;
+        }
+
+        // Fallback element type: extract tag from config.html, or default to 'div'
+        console.log(value);
+
+        // Create a dynamic element tag using Lit's `html`
+        // This works because Lit allows tag name interpolation with caution
+        return html`
+            <div
+            style="display: inline-block"
+            class="editable"
+            tabIndex=${tabIndex}
+            @focus=${(e) => {
+                MirraEdit.edit(e.target, (x) => {
+                    model.set({ [modelProperty]: x }).save();
+                });
+            }}
+            >${value}</div>
+        `;
     }
 }
 

@@ -24,7 +24,7 @@
         import { DateTime, Duration } from 'https://esm.sh/luxon';
         import { html } from 'https://esm.sh/lit';
         import $ from 'https://esm.sh/jquery';
-        import { MirraModel, MirraView, MirraEdit, MirraModelMongoDB } from './static/mirra.js';
+        import { MirraModel, MirraView, MirraEdit, MirraConsumer, MirraModelMongoDB } from './static/mirra.js';
 
         class Model extends MirraModelMongoDB {
         }
@@ -54,15 +54,15 @@
             static properties = {
                 person: { type: Person },
             };
-            editPerson() {
-                this.person.set({name: '237823478324'});
-                // this.person.name = '237823478324';
-                this.requestUpdate();
-            }
+            // editPerson() {
+            //     this.person.set({name: '237823478324'});
+            //     // this.person.name = '237823478324';
+            //     this.requestUpdate();
+            // }
             render() {
                 if (!this.person) return html`loading...`;
                 return html`
-                    <p><a @click=${() => this.editPerson()}>EDIT: </a> <i>${this.person.get().name}</i></p>
+                    <p><i>[ ${this.editable(this.person,'name')} ]</i></p>
                 `;
             }
         }
@@ -70,7 +70,12 @@
 
         export class PersonList extends MirraView {
             static properties = {
-                people: { type: Object },
+                consumers: { type: Array },
+                /*
+                maybe instead do:
+
+                persons: { type: MirraConsumer }
+                */
             };
 
             constructor() {
@@ -98,115 +103,24 @@
             customElements.define('person-list', PersonList);
 
 
-        Person.fetch(true).then(_ => {
-            let p = Person.items();
-            // p.itemPath = () => { return '/persons' };
-            document.getElementById('d1').querySelector('person-list').people = p;
-            document.getElementById('d2').querySelector('person-list').people = p;
-        });
-
-
-        // setTimeout(() => {
-        //     document.querySelector('person-list-item').person = { name: 'Ryan H' };
-        // }, 2100);
-
-
-
-        // let p1 = new Person({ name: 'Sam G' });
-        // let p2 = new Person({ name: 'Tim P' });
-        // await p1.save();
-        // await p2.save();
-        // // console.log(p2);
-        // console.log("!", new Date().getTime());
-
-        // Person.fetch().then(() => {
-        //     Person.items().forEach(p => { new PersonView_list({person:p}) });;
-        //     PersonView_list.updateGroup();
-        //     PersonView_list.uiGroup.appendTo('body');
+        // Person.fetch(true).then(_ => {
+        //     // let p = Person.items();
+        //     // p.itemPath = () => { return '/persons' };
+            document.getElementById('d1').querySelector('person-list').consumers = [ new MirraConsumer(Person) ];
+        //     // document.getElementById('d2').querySelector('person-list').people = p;
         // });
 
-        // PersonView_list.fetch(Person).then(_ => PersonView_list.to('body'));
 
-
-        // PersonView_list.init(Person, '#d1');
-
-
-
-        // class PersonView2_list extends PersonView_list {}
-
-        // class PersonView2_list extends MirraView {
-        //     static expects() {
-        //         return { person: Person }    // name of model and its class
-        //     }
-
-        //     create() {
-        //                         this.ui = this.editable('person', 'name'); 
-
-        //         // this.ui = $(`<h5 class='editable'>`).on('click', () => {
-        //         //     console.log("***");
-                    
-        //         //     MirraEdit.edit(this, 
-        //         //         x => {
-        //         //             this.model('person').set({ name: x }).save();
-        //         //         },
-        //         //         y => {
-        //         //             console.log("$");
-        //         //             this.model('person').delete();
-        //         //         }
-        //         //     );
-        //         // });
-        //     }
-        //     update() {
-        //         // console.log(this);
-        //         const [mPerson, dPerson] = this.modeldata('person');
-        //         // console.log(dPerson.name);
-        //         this.ui.text(dPerson.name);
-
-        //                         this.ui.removeClass('deleted');
-        //         console.log(dPerson._x);
-        //         if (dPerson._x) {
-        //             this.ui.addClass('deleted');
-        //         }
-
-        //     }
-
-        //     static _add() {
-        //         console.log(5);
-        //         const cls = this.constructor;
-        //         const p = new Person({ name: '___' });
-        //         // new PersonView_list({ person: p });
-        //     }
-
-        //     static createGroup() {
-        //         // console.log(11111111111);
-        //         this.uiGroup = $(`<div>`).append(
-        //             $(`<button>`).text('Add').on('click', this._add)
-        //         );
-        //     }
-
-        //     // static async sleep(ms) {
-        //     //     return new Promise(resolve => setTimeout(resolve, ms));
-        //     // }
-
-        //     static async updateGroup() {
-        //         // console.log(2222);
-        //         this.uiGroup.detach('h5');
-        //         // this.uiGroup.append($(`<button>`).text('Adeeed').on('click', this._add));
-        //         console.log(this.views);
-        //         this.views.forEach(view => {
-        //             // console.log(view.ui);
-        //             this.uiGroup.append(view.ui);
-        //             if (!view.ui[0].__hashcode) {
-        //                 view.ui[0].__hashcode = Math.random().toString(36).substr(2, 9);
-        //             }
-        //             // console.log(view.ui[0].__hashcode);
-        //         });
+        // function test(data) {
+        //     for (let d in data) {
+        //         console.log(data[d].get().name);
         //     }
         // }
-        // PersonView2_list.init(Person, '#d2');
 
-
-        // setTimeout(() => { PersonView2_list.init(Person, '#d2', false); }, 1000);
+        // let pp = new MirraConsumer(Person, test, null, {
+        //     name: '_f4__' 
+        // });
+        
 
     </script>
 
