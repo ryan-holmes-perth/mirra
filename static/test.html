@@ -26,6 +26,9 @@
         import $ from 'https://esm.sh/jquery';
         import { MirraModel, MirraView, MirraEdit, MirraConsumer, MirraModelMongoDB } from './static/mirra.js';
 
+        class Consumer extends MirraConsumer {
+        }
+
         class Model extends MirraModelMongoDB {
         }
 
@@ -70,16 +73,12 @@
 
         export class PersonList extends MirraView {
             static properties = {
-                consumers: { type: Array },
-                /*
-                maybe instead do:
-
-                persons: { type: MirraConsumer }
-                */
+                people: { type: Consumer },
             };
 
             constructor() {
                 super();
+                this._aaa = crypto.randomUUID().substring(0,4);
             }
 
             addPerson() {
@@ -90,10 +89,14 @@
 
             render() {
                 if (!this.people) return html`loading...`;
+
+                console.log("===========================",this._aaa);
                 
+                this._personItems = Object.values(this.people.items() ?? {});
+
                 return html`
                 <a @click=${() => this.addPerson()}>Add...</a>
-                ${Object.values(this.people).map(
+                ${this._personItems.map(
                     person => html`<person-list-item .person=${person}></person-list-item>`
                 )}
                 `;
@@ -106,7 +109,12 @@
         // Person.fetch(true).then(_ => {
         //     // let p = Person.items();
         //     // p.itemPath = () => { return '/persons' };
-            document.getElementById('d1').querySelector('person-list').consumers = [ new MirraConsumer(Person) ];
+            document.getElementById('d1').querySelector('person-list').people = new MirraConsumer(Person);
+            setTimeout(() => {
+                document.getElementById('d2').querySelector('person-list').people = new MirraConsumer(Person, null, null, {
+                    name: /^_/
+                });
+            }, 0);
         //     // document.getElementById('d2').querySelector('person-list').people = p;
         // });
 

@@ -180,6 +180,7 @@ export class MirraConsumer {
     #sort;
     #filter;
     #items;
+    #itemsDone;
 
     constructor(cls, callback = null, sort = null, filter = null) {
         this.#cls = cls;
@@ -187,8 +188,11 @@ export class MirraConsumer {
         this.#sort = sort;
         this.#filter = filter;
 
+        console.log(cls.itemsPath, cls.itemPath);
         bus.on(cls.itemsPath, () => this.provide());
-        bus.on(cls.itemPaths + "/*", () => this.provide());
+        bus.on(cls.itemsPath + "/*", () => this.provide());
+
+        this._aaa = crypto.randomUUID().substring(0, 4);
 
         this.provide();
     }
@@ -197,17 +201,21 @@ export class MirraConsumer {
         this.#callback = callback;
     }
 
-    async provide() {
-        console.log(this);
-        await this.#cls.fetch(true);
-        this.#items = this.#cls.map()
-        // console.log(this.#items);
-        this.#items = this._filter(this.#items, 'and', this.#filter);
-        // this._sort();
-        if (this.#callback) this.#callback(this.#items);
+    items() {
+        return this.#itemsDone;
     }
 
-    _filter(items, type, value) {
+    async provide() {
+        await this.#cls.fetch(true);
+        this.#items = this.#cls.map()
+        this.#itemsDone = this._filter(this.#items, 'and', this.#filter);
+        console.log(this._aaa, this.#itemsDone);
+        // this._sort();
+        if (this.#callback) this.#callback(this.#itemsDone);
+    }
+
+    _filter(i, type, value) {
+        let items = { ...i };
         let result = {};
         switch (type) {
             case 'or':
@@ -749,10 +757,8 @@ export class MirraView extends LitElement {
     willUpdate(changedProperties) {
         const cls = this.constructor;
         for (let t in cls.properties) {
-            if (t === 'consumers') {
-                this[t]?.forEach(consumer => {
-                    consumer.setCallback(() => this.requestUpdate());
-                });
+            if (this[t] instanceof MirraConsumer) {
+                this[t].setCallback(() => this.requestUpdate());
             } else {
                 console.log(t, this[t]?.itemPath, () => this.requestUpdate());
                 if (this[t]?.itemPath) {
@@ -769,7 +775,17 @@ export class MirraView extends LitElement {
                 }
             }
         }
+        super.willUpdate(changedProperties);
     }
+
+    // willUpdate(changedProps) {
+    //     if (!this.isConnected) return;
+    // }
+// requestUpdate(...args) {
+//   if (!this.isConnected) return;
+//   super.requestUpdate(...args);
+// }
+
 
     disconnectedCallback() {
         const cls = this.constructor;
@@ -782,7 +798,7 @@ export class MirraView extends LitElement {
     }
 
     render() {
-        return html`<p>Hello, world!</p>`;
+        return html``;
     }
 
     editable(model, modelProperty, config = {}) {
