@@ -34,7 +34,7 @@
         import { DateTime, Duration } from 'https://esm.sh/luxon';
         import { html } from 'https://esm.sh/lit';
         import $ from 'https://esm.sh/jquery';
-        import { MirraModel, MirraView, MirraEdit, MirraList, MirraModelMongoDB, Store } from './static/mirra.js';
+        import { MirraModel, MirraView, MirraEdit, MirraList, MirraModelMongoDB, Store, Sort } from './static/mirra.js';
 
         class List extends MirraList {
         }
@@ -86,8 +86,8 @@
         // const p = new Person({ name: 'rty' });
         // p.save();
 
-        const e = new Event({ name: 'Event 1' });
-        e.save();
+        // const e = new Event({ name: 'Event 1' });
+        // e.save();
 
         const el1 = Event.list();
 
@@ -167,7 +167,7 @@
 
             addPerson() {
                 let p = new Person({ name: "......" });
-                console.log(p);
+                // console.log(p);
                 // this.people[p.key] = p;
                 // this.requestUpdate();
             }
@@ -175,13 +175,14 @@
             render() {
                 if (!this.people) return html`loading...`;
 
+                console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
                 // console.log("===========================",this._aaa);
                 
                 this._personItems = this.people;//Object.values(this.people.items() ?? {});
 
-                for (const p of this.people) {
-                    console.log("====> ",p.name);
-                }
+                // for (const p of this.people) {
+                //     console.log("====> ",p.name);
+                // }
 
                 return html`
                 <a @click=${() => this.addPerson()}>Add...</a>
@@ -223,7 +224,7 @@
 
             addEvent() {
                 let e = new Event({ name: "New Event" });
-                console.log(e);
+                // console.log(e);
             }
 
             render() {
@@ -231,9 +232,9 @@
 
                 this._eventItems = this.events;
 
-                for (const e of this.events) {
-                    console.log("====> ", e.name);
-                }
+                // for (const e of this.events) {
+                //     console.log("====> ", e.name);
+                // }
 
                 return html`
                     <a @click=${() => this.addEvent()}>Add...</a>
@@ -247,7 +248,7 @@
 
 
 
-        document.getElementById('d1').querySelector('person-list').people = pl1;
+        document.getElementById('d1').querySelector('person-list').people = Person.list(null, { name: Sort.ASC });
 
         document.getElementById('d2').querySelector('person-list').people = Person.list({
             name: /^\./

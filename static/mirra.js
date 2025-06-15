@@ -196,19 +196,22 @@ export class MirraList {
 
         Store.addFilter(cls, filter);
         this.#fetching = this.#cls.fetch(filter, sort).then(x => {
-            this.#items = x;
+            this.#items = Sort.sort(x, this.#sort);
             this.#triggerCallbacks();
 
             // bus.on(cls.modelPath, (e) => this._event(e));
             bus.on(`${cls.modelPath}/*`, (e) => this._event(e));
         });
-
-
     }
+
 
     // Make it iterable
     [Symbol.iterator]() {
         return this.#items.values();
+    }
+
+    size() {
+        return this.#items.size;
     }
 
     // === Array-like methods ===
@@ -235,35 +238,57 @@ export class MirraList {
     }
     #triggerCallbacks() {
         this.#callbacks.forEach(callback => {
-            console.log(callback);
+            console.log("    trigger\n    ", callback);
             callback();
         });
     }
 
     _event(e) {
-        console.log(e);
+        console.log('  event:\n  ', e);
+
+        let changed = false;
 
         // console.log(e);
         switch (e.event) {
             case 'created':
+                console.log(this.#cls.name, e.data);
                 if (Filter.pass(e.data, this.#filter, Filter.CLIENT)) {
+                    console.log("YES");
                     this.#items.set(e.data.id, e.data);
+                    changed = true;
                 }
                 console.log(this.#items);
                 break;
             case 'updating':
                 break;
             case 'updated':
-                // const o = this.#items.get(Store._getIdFromData(e.data));
+                const o = this.#items.get(e.data.id);
+                const pass = Filter.pass(e.data, this.#filter, Filter.CLIENT);
+                if (o && !pass) {
+                    this.#items.delete(e.data.id);
+                    changed = true;
+                } else if (!o && pass) {
+                    // console.log("Updating", e.data.id, e.data);
+                    this.#items.set(e.data.id, e.data);
+                    changed = true;
+                } else if (o && pass) {
+                    changed = true;
+                }
                 break;
             case 'deleting':
                 break;
             case 'deleted':
+                this.#items.delete(e.data.id);
+                changed = true;
                 break;
         }
 
-        this.#triggerCallbacks();
-
+        if (changed) {
+            setTimeout(() => {
+                this.#items = Sort.sort(this.#items, this.#sort);
+                this.#triggerCallbacks();
+            }, 0);
+        }
         // switch (e.event
     }
 
@@ -286,38 +311,67 @@ export class Filter {
     static SERVER = 'S';
     static CLIENT = 'C';
 
-    static pass(data, filter, mode = Filter.CLIENT) {
-        return (this._filter({ _: data }, 'and', filter) != {});
+    static pass(obj, filter, mode = Filter.CLIENT) {
+        return this.passForClass(obj.constructor, obj, filter, mode);
+    }
+    static filter(objs, filter, mode = Filter.CLIENT) {
+        if (!objs || objs.size() == 0) return objs;
+
+        return this.filterForClass(objs[0].constructor, objs, filter, mode);
     }
 
-    static _filter(i, type, value) {
+    static passForClass(cls, data, filter, mode = Filter.CLIENT) {
+        let id;
+        if (data instanceof MirraModel) {
+            id = data.id;
+        } else {
+            // console.log(cls.name, data);
+            // console.log('-------------',cls._getIdFromData(data));
+            id = cls._getIdFromData(data);
+        }
+        console.log(`<<<<< ${id} >>>>>`, data);
+        const result = this._filter(cls, { [id]: data }, 'and', filter);
+        console.log("*******", result);
+        return Object.keys(result).length == 1;
+    }
+
+    static filterForClass(cls, datas, filter, mode = Filter.CLIENT) {
+        return this._filter(cls, datas, 'and', filter);
+    }
+
+    static _filter(cls, i, type, value) {
         let items = { ...i };
-        console.log("@@@@@@", items);
+        console.log("@", cls.name, items, type);
         let result = {};
         switch (type) {
             case 'or':
                 for (let v in value) {
                     result = {
                         ...result,
-                        ...this._filter(items, v, value[v])
+                        ...this._filter(cls, items, v, value[v])
                     };
                 }
                 break;
             case 'and':
                 result = items;
+                console.log(result);
                 for (let v in value) {
-                    let andMap = this._filter(items, v, value[v]);
+                    let andMap = this._filter(cls, items, v, value[v]);
+                    console.log(andMap);
                     for (let r in result) {
+                        console.log(r);
                         if (!(r in andMap)) {
+                            console.log('...deleting');
                             delete result[r];
                         }
                     }
                 }
+                console.log(result);
                 break;
             case 'not':
                 result = items;
                 for (let v in value) {
-                    let notMap = this._filter(items, v, value[v]);
+                    let notMap = this._filter(cls, items, v, value[v]);
                     for (let n in notMap) {
                         delete result[n];
                     }
@@ -325,28 +379,31 @@ export class Filter {
                 // console.log(result);
                 break;
             default:
-                for (const item of Object.values(items)) {
-                    let itemValue = item[type];
+                for (const [id, item] of Object.entries(items)) {
+                    // const id = cls._getIdFromData(item);
+                    const itemValue = item[type];
+                    console.log(item, id, type, itemValue, item.name, item['name']);
 
                     switch (typeof value) {
                         case 'string':
                             if (itemValue == value) {
-                                result[i] = items[i];
+                                result[id] = item;
                             }
                             break;
                         case 'number':
                             if (itemValue == value) {
-                                result[i] = items[i];
+                                result[id] = item;
                             }
                             break;
                         case 'object':
                             if (value instanceof RegExp) {
                                 if (itemValue?.match(value)) {
-                                    result[i] = items[i];
+                                    console.log(type, itemValue, value);
+                                    result[id] = item;
                                 }
                             } else if (value instanceof Array && value.length == 2) {
                                 if (itemValue >= value[0] && itemValue <= value[1]) {
-                                    result[i] = items[i];
+                                    result[id] = item;
                                 }
                             }
                             break;
@@ -354,25 +411,57 @@ export class Filter {
                 }
                 break;
         }
+        console.log(result);
         return result;
     }
 
 }
 
 export class Sort {
+    static ASC = Symbol('asc');
+    static DESC = Symbol('desc');
+
     static sort(datas, sort) {
-        // will it change datas?
-        return datas;
+        console.log(">>>",datas);
+        // Convert Map to array of [key, value] pairs for sorting
+        const entries = Array.from(datas.entries());
+        entries.sort(([keyA, a], [keyB, b]) => {
+            for (const [key, order] of Object.entries(sort)) {
+                const aValue = a[key];
+                const bValue = b[key];
+                if (aValue === bValue) continue;
+
+                let comparison = 0;
+                if (order === Sort.ASC) {
+                    comparison = aValue < bValue ? -1 : 1;
+                } else if (order === Sort.DESC) {
+                    comparison = aValue > bValue ? -1 : 1;
+                } else if (Array.isArray(order)) {
+                    const [nullsFirst, direction] = order;
+                    if (nullsFirst && (aValue === null || bValue === null)) {
+                        comparison = aValue === null ? 1 : -1;
+                    } else if (direction === Sort.DESC) {
+                        comparison = aValue > bValue ? -1 : 1;
+                    } else {
+                        comparison = aValue < bValue ? -1 : 1;
+                    }
+                }
+
+                if (comparison !== 0) return comparison;
+            }
+            return 0;
+        });
+        // Return a new Map with sorted entries
+        console.log("<<<",new Map(entries));
+        return new Map(entries);
     }
 }
 
-// export class MirraList {
-
-//     #items = new Map();
-
-//     constructor(cls, filter, sort) {
-
-//     }
+// const result = Sort.sort(MirraView.list(), {
+//     name: Sort.ASC,
+//     birthdate: [null, Sort.DESC], // nulls first
+//     status: ['P', 'A', 'C', null], // sort in specific order, nulls last
+// });
 
 //     [Symbol.iterator]() {
 //         return this.#items.values();
@@ -391,22 +480,22 @@ export class Store {
 
             /* check here to make sure it's the next message in the sequence */
 
-            console.log(data);
+            // console.log(data);
 
             if (data.path) {
-                console.log(data.path);
-                console.log(this.#paths);
+                // console.log(data.path);
+                // console.log(this.#paths);
 
                 const cls = this.#paths.get(data.path);
                 const oMap = this.#store.get(cls);
 
-                console.log(cls, oMap);
+                // console.log(cls, oMap);
 
                 if (oMap) {
                     switch (data.mode) {
                         case 'create':
                             if (!oMap.has(data.id)) {
-                                if (Filter.pass(data.data, Store.getServerFilter(cls), Filter.SERVER)) {
+                                if (Filter.passForClass(cls, data.data, Store.getServerFilter(cls), Filter.SERVER)) {
                                     new cls(data.data, data.id);
                                 }
                             }
@@ -480,6 +569,7 @@ export class MirraModel {
 
     constructor(data = {}, id = null) {
         const cls = this.constructor;
+        this.#definePropertyAccessors();
 
         data = {
             ...this.constructor.default,
@@ -490,8 +580,6 @@ export class MirraModel {
             this.#persisted = true;
         }
         this.create(data, id ?? crypto.randomUUID());
-
-        this.#definePropertyAccessors();
 
         Store.put(this);
     }
@@ -516,9 +604,7 @@ export class MirraModel {
         return this.constructor._getIdFromData(this.#_data);
     }
     set id(id) {
-        console.log(id);
         this.constructor._setIdToData(this.#_data, id);
-        console.log(this.#_data);
     }
     static _getIdFromData(data) {
         throw new Error('Subclasses must override "_getIdFromData(data)"');
@@ -559,24 +645,26 @@ export class MirraModel {
         // console.log('FETCHING!!!', this.name, this.constructor.name);
         this._fetched = true;
         const datas = await this._fetch(filter, sort);
+        // const filteredDatas = Filter.pass(datas, filter);
         const result = new Map();
         for (const data of datas) {
             const id = this._getIdFromData(data);
-            console.log(id);
+            // console.log(id);
             // console.log(Store.get(this, id));
             let o = null;
             if (Store.has(this, id)) {
                 // console.log(data);
                 o = Store.get(this, id)
                 o.update(data);
-                if (Filter.pass(data, filter)) {
-                    result.set(id,o);
+                // console.log(this);
+                if (Filter.passForClass(this, data, filter)) {
+                    result.set(id, o);
                 }
             } else {
                 // console.log(data);
-                if (Filter.pass(data, filter)) {
+                if (Filter.passForClass(this, data, filter)) {
                     o = new this(data, id);
-                    result.set(id,o);
+                    result.set(id, o);
                 }
             }
         }
@@ -606,7 +694,7 @@ export class MirraModel {
         this.id = id;
         this.#path = `${this.constructor.modelPath}/${this.id}`;
 
-        console.log(data,id);
+        console.log("$$$$$$$$$$$$$", data, id);
         bus.emit(this.path, { event: 'created', data: this });
         return this;
     }
@@ -921,10 +1009,10 @@ export class MirraView extends LitElement {
                     class="s-mediaType"
                     .value=${value}
                     @change=${(e) => {
-                        const val = e.target.value;
-                        model[modelProperty] = val;
-                        model.save();
-                    }}
+                    const val = e.target.value;
+                    model[modelProperty] = val;
+                    model.save();
+                }}
                     >
                     ${Object.entries(config.options).map(
                     ([k, v]) => html`<option value=${k}>${v}</option>`
@@ -1215,6 +1303,7 @@ export class MirraEdit {
     static edit(elem, callback, deleteCallback) {
         // console.log.log(deleteCallback);
         const o = $($(elem).closest('.editable'));
+        console.log(o, o.text());
         o.data('_cval', o.text());
 
         o.attr('contenteditable', true);
@@ -1230,7 +1319,7 @@ export class MirraEdit {
                 o.attr('contenteditable', false);
                 o[0].scrollLeft = 0;
                 if (o.text() != o.data('_cval')) {
-                    // console.log(callback);
+                    console.log("$$$", o.text());
                     callback(o.text());
                 }
             });
@@ -1349,10 +1438,10 @@ function emitter() {
         },
         emit(type, event) {
             for (const { pattern, regex, handler } of handlers) {
-                console.log(pattern, regex, handler);
+                // console.log(type, pattern, regex, handler);
                 const matches = regex ? regex.test(type) : pattern === type;
                 if (matches) {
-                    console.log("YES!");
+                    // console.log("EMIT ==>\n", type, event);
                     handler(event, type);
                 }
             }
@@ -1463,4 +1552,3 @@ function setCursorToStartIfNone(contentEditableElement) {
         }
     }
 }
-
