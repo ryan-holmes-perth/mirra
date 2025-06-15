@@ -19,14 +19,24 @@
         <person-list/>
     </div>
 
+    <br clear="both"/>
+
+    <div id="e1" style="float:left">
+        <event-list/>   
+    </div>
+    <div id="e2" style="float:right">
+        <event-list/>
+    </div>
+    <br clear="both"/>
+
     <script type="module">
 
         import { DateTime, Duration } from 'https://esm.sh/luxon';
         import { html } from 'https://esm.sh/lit';
         import $ from 'https://esm.sh/jquery';
-        import { MirraModel, MirraView, MirraEdit, MirraConsumer, MirraModelMongoDB } from './static/mirra.js';
+        import { MirraModel, MirraView, MirraEdit, MirraList, MirraModelMongoDB, Store } from './static/mirra.js';
 
-        class Consumer extends MirraConsumer {
+        class List extends MirraList {
         }
 
         class Model extends MirraModelMongoDB {
@@ -42,17 +52,91 @@
             // }
 
 
-            static get type() {
-                return 'persons';
+            static get modelPath() {
+                return '/persons';
             }
-            get properties() {
+            static get properties() {
                 return {
                     name: { type: String, length: { min: 2, max: 30 } }
                 };
             }
         }
+        window.Person = Person;
+
+        class Event extends Model {
+            
+            static get modelPath() {
+                return '/events';
+            }
+            static get properties() {
+                return {
+                    name: { type: String, length: { min: 2, max: 30 } },
+                    start: { type: DateTime, default: () => DateTime.now() },
+                    end: { type: DateTime, default: () => DateTime.now().plus({ days: 1 }) }
+                };
+            }
+        }
+
+        // window.Person = Person;
+
+        // setTimeout(()=>{
+        // document.body.innerHTML += `<button onclick="new Person({ name: ""+Math.random() }).save()">NEW PERSON</button>`;
+        // }, 100);
+
+        // const p = new Person({ name: 'rty' });
+        // p.save();
+
+        const e = new Event({ name: 'Event 1' });
+        e.save();
+
+        const el1 = Event.list();
+
+        // const ps = Person.fetch().then(r => {
+        //     const p = Store.get(Person).values().next().value;
+        //     console.log(p.name);
+        //     p.name = 'DEF';
+        //     console.log(p.name);
+        //     p.save();
+        //     console.log(p.name);
+        //     console.log(Store.get(Person).values());
+        // });
 
 
+        // const ps2 = Person.fetch().then(r => {
+        //     const p = Store.get(Person).values().next().value;
+        //     console.log(p.name);
+        //     p.name = 'GHI';
+        //     console.log(p.name);
+        //     p.save();
+        //     console.log(p.name);
+        //     console.log(Store.get(Person).values());
+        // });
+
+
+        const pl1 = Person.list();
+        // const pl2 = pl1.map(x => { name: `[[[${x.name}]]]`});
+        // for await (const p of pl2) {
+        //     console.log(p.name);
+        // }
+        // console.log('done.');
+
+
+        // class PersonView_list extends MirraView {
+        //     static properties = {
+        //         person: { type: Person },
+        //     };
+        //     // editPerson() {
+        //     //     this.person.set({name: '237823478324'});
+        //     //     // this.person.name = '237823478324';
+        //     //     this.requestUpdate();
+        //     // }
+        //     render() {
+        //         if (!this.person) return html`loading...`;
+        //         return html`
+        //             <p><i>[ ${this.editable(this.person,'name')} ]</i></p>
+        //         `;
+        //     }
+        // }
         class PersonView_list extends MirraView {
             static properties = {
                 person: { type: Person },
@@ -73,26 +157,31 @@
 
         export class PersonList extends MirraView {
             static properties = {
-                people: { type: Consumer },
+                people: { type: List },
             };
 
             constructor() {
                 super();
-                this._aaa = crypto.randomUUID().substring(0,4);
+                // this._aaa = crypto.randomUUID().substring(0,4);
             }
 
             addPerson() {
                 let p = new Person({ name: "......" });
-                this.people[p.key] = p;
-                this.requestUpdate();
+                console.log(p);
+                // this.people[p.key] = p;
+                // this.requestUpdate();
             }
 
             render() {
                 if (!this.people) return html`loading...`;
 
-                console.log("===========================",this._aaa);
+                // console.log("===========================",this._aaa);
                 
-                this._personItems = Object.values(this.people.items() ?? {});
+                this._personItems = this.people;//Object.values(this.people.items() ?? {});
+
+                for (const p of this.people) {
+                    console.log("====> ",p.name);
+                }
 
                 return html`
                 <a @click=${() => this.addPerson()}>Add...</a>
@@ -102,21 +191,91 @@
                 `;
             }
         }
+        customElements.define('person-list', PersonList);
 
-            customElements.define('person-list', PersonList);
+        class EventView_list extends MirraView {
+            static properties = {
+                event: { type: Event },
+            };
+            render() {
+                if (!this.event) return html`loading...`;
+                return html`
+                    <p>
+                        <i>[ ${this.editable(this.event, 'name')} ]</i>
+                        <br>
+                        Start: ${this.event.start}
+                        <br>
+                        End: ${this.event.end}
+                    </p>
+                `;
+            }
+        }
+        customElements.define('event-list-item', EventView_list);
+
+        export class EventList extends MirraView {
+            static properties = {
+                events: { type: List },
+            };
+
+            constructor() {
+                super();
+            }
+
+            addEvent() {
+                let e = new Event({ name: "New Event" });
+                console.log(e);
+            }
+
+            render() {
+                if (!this.events) return html`loading...`;
+
+                this._eventItems = this.events;
+
+                for (const e of this.events) {
+                    console.log("====> ", e.name);
+                }
+
+                return html`
+                    <a @click=${() => this.addEvent()}>Add...</a>
+                    ${this._eventItems.map(
+                        event => html`<event-list-item .event=${event}></event-list-item>`
+                    )}
+                `;
+            }
+        }
+        customElements.define('event-list', EventList);
 
 
-        // Person.fetch(true).then(_ => {
-        //     // let p = Person.items();
-        //     // p.itemPath = () => { return '/persons' };
-            document.getElementById('d1').querySelector('person-list').people = new MirraConsumer(Person);
-            setTimeout(() => {
-                document.getElementById('d2').querySelector('person-list').people = new MirraConsumer(Person, null, null, {
-                    name: /^_/
-                });
-            }, 0);
-        //     // document.getElementById('d2').querySelector('person-list').people = p;
-        // });
+
+        document.getElementById('d1').querySelector('person-list').people = pl1;
+
+        document.getElementById('d2').querySelector('person-list').people = Person.list({
+            name: /^\./
+        });
+
+
+        document.getElementById('e1').querySelector('event-list').events = el1;
+        document.getElementById('e2').querySelector('event-list').events = Event.list({
+            name: /^\*/
+        });
+
+
+        // setTimeout(() => {
+        //     new Event({ name: 'Event 20', start: DateTime.now(), end: DateTime.now().plus({ hours: 2 }) }).save();   
+        // }, 3000);
+
+
+        // // Person.fetch(true).then(_ => {
+        // //     // let p = Person.items();
+        // //     // p.itemPath = () => { return '/persons' };
+        //     document.getElementById('d1').querySelector('person-list').people = new MirraConsumer(Person);
+        //     setTimeout(() => {
+        //         document.getElementById('d2').querySelector('person-list').people = new MirraConsumer(Person, null, null, {
+        //             name: /^_/
+        //         });
+        //     }, 0);
+        // //     // document.getElementById('d2').querySelector('person-list').people = p;
+        // // });
 
 
         // function test(data) {

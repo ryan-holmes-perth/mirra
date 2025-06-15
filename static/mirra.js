@@ -120,6 +120,8 @@ export function browserId() {
 
 window.browserId = browserId;
 
+window.seq = 1;
+
 
 export class MirraSettings {
     constructor(settings = {}) {
@@ -174,48 +176,123 @@ export class MirraSettings {
 
 
 
-export class MirraConsumer {
+export class MirraList {
     #cls;
-    #callback;
+    #callbacks;
     #sort;
     #filter;
-    #items;
-    #itemsDone;
+    #fetching;
+    #items = new Map();
+    // #itemsDone;
 
-    constructor(cls, callback = null, sort = null, filter = null) {
+    constructor(cls, filter = {}, sort = {}, ...callbacks) {
         this.#cls = cls;
-        this.#callback = callback;
+        this.#callbacks = [...callbacks];
         this.#sort = sort;
         this.#filter = filter;
 
-        console.log(cls.itemsPath, cls.itemPath);
-        bus.on(cls.itemsPath, () => this.provide());
-        bus.on(cls.itemsPath + "/*", () => this.provide());
 
-        this._aaa = crypto.randomUUID().substring(0, 4);
+        // this._aaa = crypto.randomUUID().substring(0, 4);
 
-        this.provide();
+        Store.addFilter(cls, filter);
+        this.#fetching = this.#cls.fetch(filter, sort).then(x => {
+            this.#items = x;
+            this.#triggerCallbacks();
+
+            // bus.on(cls.modelPath, (e) => this._event(e));
+            bus.on(`${cls.modelPath}/*`, (e) => this._event(e));
+        });
+
+
     }
 
-    setCallback(callback) {
-        this.#callback = callback;
+    // Make it iterable
+    [Symbol.iterator]() {
+        return this.#items.values();
     }
 
-    items() {
-        return this.#itemsDone;
+    // === Array-like methods ===
+
+    map(callback) {
+        return (this.#items.values() ?? []).map(callback);
     }
 
-    async provide() {
-        await this.#cls.fetch(true);
-        this.#items = this.#cls.map()
-        this.#itemsDone = this._filter(this.#items, 'and', this.#filter);
-        console.log(this._aaa, this.#itemsDone);
-        // this._sort();
-        if (this.#callback) this.#callback(this.#itemsDone);
+    filter(callback) {
+        return (this.#items.values() ?? []).filter(callback);
     }
 
-    _filter(i, type, value) {
+    forEach(callback) {
+        return (this.#items.values() ?? []).forEach(callback);
+    }
+
+    reduce(callback, initialValue) {
+        return (this.#items.values() ?? []).reduce(callback, initialValue);
+    }
+
+
+    addCallback(callback) {
+        this.#callbacks.push(callback);
+    }
+    #triggerCallbacks() {
+        this.#callbacks.forEach(callback => {
+            console.log(callback);
+            callback();
+        });
+    }
+
+    _event(e) {
+        console.log(e);
+
+        // console.log(e);
+        switch (e.event) {
+            case 'created':
+                if (Filter.pass(e.data, this.#filter, Filter.CLIENT)) {
+                    this.#items.set(e.data.id, e.data);
+                }
+                console.log(this.#items);
+                break;
+            case 'updating':
+                break;
+            case 'updated':
+                // const o = this.#items.get(Store._getIdFromData(e.data));
+                break;
+            case 'deleting':
+                break;
+            case 'deleted':
+                break;
+        }
+
+        this.#triggerCallbacks();
+
+        // switch (e.event
+    }
+
+    // async provide() {
+    //     await this.#cls.fetch(this.#filter, this.#sort);
+    //     this.#items = this.#cls.map();
+    //     this.#itemsDone = this._filter(this.#items, 'and', this.#filter);
+    //     console.log(this._aaa, this.#itemsDone);
+    //     // this._sort();
+    //     if (this.#callback) this.#callback(this.#itemsDone);
+    // }
+
+
+    // _sort() {
+    // }
+}
+
+
+export class Filter {
+    static SERVER = 'S';
+    static CLIENT = 'C';
+
+    static pass(data, filter, mode = Filter.CLIENT) {
+        return (this._filter({ _: data }, 'and', filter) != {});
+    }
+
+    static _filter(i, type, value) {
         let items = { ...i };
+        console.log("@@@@@@", items);
         let result = {};
         switch (type) {
             case 'or':
@@ -248,8 +325,8 @@ export class MirraConsumer {
                 // console.log(result);
                 break;
             default:
-                for (let i in items) {
-                    let itemValue = items[i].get()[type];
+                for (const item of Object.values(items)) {
+                    let itemValue = item[type];
 
                     switch (typeof value) {
                         case 'string':
@@ -264,7 +341,7 @@ export class MirraConsumer {
                             break;
                         case 'object':
                             if (value instanceof RegExp) {
-                                if (itemValue.match(value)) {
+                                if (itemValue?.match(value)) {
                                     result[i] = items[i];
                                 }
                             } else if (value instanceof Array && value.length == 2) {
@@ -280,19 +357,112 @@ export class MirraConsumer {
         return result;
     }
 
-    _sort() {
+}
+
+export class Sort {
+    static sort(datas, sort) {
+        // will it change datas?
+        return datas;
     }
 }
 
+// export class MirraList {
+
+//     #items = new Map();
+
+//     constructor(cls, filter, sort) {
+
+//     }
+
+//     [Symbol.iterator]() {
+//         return this.#items.values();
+//     }
+
+// }
+
+/*remove export after testing*/
+export class Store {
+    static #store = new Map();
+    static #paths = new Map();
+    static #filters = new Map();
+
+    static {
+        Store.ws = new ReconnectingWebSocket(data => {
+
+            /* check here to make sure it's the next message in the sequence */
+
+            console.log(data);
+
+            if (data.path) {
+                console.log(data.path);
+                console.log(this.#paths);
+
+                const cls = this.#paths.get(data.path);
+                const oMap = this.#store.get(cls);
+
+                console.log(cls, oMap);
+
+                if (oMap) {
+                    switch (data.mode) {
+                        case 'create':
+                            if (!oMap.has(data.id)) {
+                                if (Filter.pass(data.data, Store.getServerFilter(cls), Filter.SERVER)) {
+                                    new cls(data.data, data.id);
+                                }
+                            }
+                            break;
+                        case 'update':
+                            oMap.get(data.id).update(data.data);
+                            break;
+                        case 'delete':
+                            oMap.get(data.id).update(data.data);  // same as update, as it just sets a delete flag
+                            break;
+                    };
+                }
+            }
+        });
+    }
+
+    static has(cls, id) {
+        return this.#store.get(cls)?.has(id) ?? false;
+    }
+
+    static get(cls, id) {
+        // console.log(cls.name);
+        return id ? this.#store.get(cls)?.get(id) : this.#store.get(cls);
+    }
+
+    static put(o) {
+        const cls = o.constructor;
+        if (!this.#store.has(cls)) {
+            this.#store.set(cls, new Map());
+            this.#paths.set(cls.modelPath, cls);
+        }
+        this.#store.get(cls).set(o.id, o);
+    }
+
+    static addFilter(cls, filter) {
+        if (!this.#filters.has(cls)) {
+            this.#filters.set(cls, []);
+        }
+        this.#filters.get(cls).push(filter);
+    }
+    static getServerFilter(cls) {
+        return {
+            or: {
+                ...cls
+            }
+        };
+    }
+}
+window.S = Store;
 
 export class MirraModel {
 
-    static #settings = new MirraSettings();
-
     #persisted = false;
-    #key = null;
-    #_data = {};
-    #data = {};
+    #_data = new Map();
+    #data = new Map();
+    #path;
 
 
 
@@ -308,265 +478,186 @@ export class MirraModel {
 
     */
 
-    static {
-    }
-
-    static get settings() {
-        return MirraModel.#settings;
-    }
-
-    static #registry = new Map();
-
-    static #getItems(cls) {
-        return MirraModel.#registry.get(cls);
-    }
-
-    static item(id) {
-        return MirraModel.#getItems(this)?.[id] ?? null;
-    }
-
-    static items() {
-        return Object.values(MirraModel.#getItems(this) ?? {});
-    }
-
-    static map() {
-        return MirraModel.#getItems(this) ?? {};
-    }
-
-    constructor(data = this.default, key = null, notify = true) {
-        // console.log(data);
+    constructor(data = {}, id = null) {
         const cls = this.constructor;
 
-        if (!MirraModel.#registry.has(cls)) {
-            MirraModel.#registry.set(cls, {});
-        }
+        data = {
+            ...this.constructor.default,
+            ...data
+        };
 
-        if (!MirraModel._initialised) {
-            MirraModel.ws = new ReconnectingWebSocket(data => {
-                // console.log.log("[ws]", data);
-                if (data.entity) {
-                    for (const [k, v] of MirraModel.#registry) {
-                        if (data.entity.startsWith(k.itemsPath)) {
-                            switch (data.mode) {
-                                case 'create':
-                                    // console.log.log('...', data.key);
-                                    // console.log.log(':::', MirraModel.#registry.get(cls)[data.key]);
-                                    if (!MirraModel.#registry.get(cls)[data.key]) {
-                                        // console.log.log(';;');
-                                        new k(data.data, data.key);
-                                    }
-                                    break;
-                                case 'update':
-                                    const o = v[data.entity.split('/')[2]];
-                                    // console.log.log("%", o);
-                                    o.load();
-                                    break;
-                                case 'delete':
-                                    const od = v[data.entity.split('/')[2]];
-                                    // console.log.log("%", od);
-                                    od.load();
-                                    break;
-                            };
-                        }
-                    }
-                }
-            });
-            MirraModel._initialised = true;
-            setTimeout(() => { console.log(MirraModel.#registry) }, 2000);
-        }
-
-
-        if (key) {
+        if (id) {
             this.#persisted = true;
-            this.#key = key;
-        } else {
-            this.#key = crypto.randomUUID();
         }
-        this.set(data);
-        MirraModel.#registry.get(cls)[this.#key] = this;
+        this.create(data, id ?? crypto.randomUUID());
 
-        if (notify) {
-            // console.log('n1');
-            bus.emit(cls.itemsPath, { event: 'created', key: this.#key, data: this.#_data });
-            // console.log('n2');
-        }
+        this.#definePropertyAccessors();
 
-        // console.log('pc');
+        Store.put(this);
     }
 
-    static get type() {
-        throw "Subclass must override 'static get type()'";
+    static get modelPath() {
+        throw "Subclass must override 'static get modelPath()'";
     }
 
-    get type() {
-        return this.constructor.type;
+    static get properties() {
+        throw new Error('Subclasses must override "static get properties()"');
     }
 
-    get key() {
-        return this.#key;
-    }
-
-    get default() {
+    static get default() {
         return {};
     }
 
-    static get itemsPath() {
-        return `/${this.type}`;
+    static list(filter = {}, sort = {}) {
+        return new MirraList(this, filter, sort);
     }
 
-    get itemPath() {
-        return `/${this.type}/${this.#key}`;
+    get id() {
+        return this.constructor._getIdFromData(this.#_data);
+    }
+    set id(id) {
+        console.log(id);
+        this.constructor._setIdToData(this.#_data, id);
+        console.log(this.#_data);
+    }
+    static _getIdFromData(data) {
+        throw new Error('Subclasses must override "_getIdFromData(data)"');
+    }
+    static _setIdToData(data, id) {
+        throw new Error('Subclasses must override "_setIdToData(data,id)"');
+    }
+
+    get path() {
+        return this.#path;
     }
 
 
-    get properties() {
-        throw new Error('Subclasses must implement the "properties" getter');
-    }
+    #definePropertyAccessors() {
+        for (const p of Object.keys(this.constructor.properties)) {
+            if (Object.prototype.hasOwnProperty.call(this, p)) continue;
 
-    get itemPath() {
-        return `/${this.type}/${this.#key}`;
-    }
-
-
-    /* this should all be done by views registering for events on the bus - then models will emit when updated */
-
-
-
-    // get views() {
-    //     throw new Error('Subclasses must implement the "ui" getter');
-    // }
-
-    // register(view) {
-    //     this.#views.push(view);
-    // }
-
-    // async #refresh() {
-    //     for (let view of this.#views) {
-    //         view.update();
-    //     }
-    // }
-
-    // get watchers() {
-    //     return {}
-    // }
-
-    // #setupWatchers() {
-    //     for (const expression in this.watchers) {
-    //         const pattern = eval('`' + expression + '`');
-    //         bus.on(pattern, (event, data) => {
-    //             this.#refresh();
-    //             if (data.callback) {
-    //                 data.callback(this);
-    //             }
-    //         });
-    //     }
-    // }
-
-
-    static async fetch(initial = false) {
-        if (!initial || !this._fetched) {
-            // console.log.log('FETCHING!!!');
-            this._fetched = true;
-            await this._fetch();
+            Object.defineProperty(this, p, {
+                get: () => {
+                    const value = this.#_data[p];
+                    this.onGet?.(p, value);
+                    return value;
+                },
+                set: (value) => {
+                    this.onSet?.(p, value);
+                    this.#_data[p] = value;
+                    bus.emit(this.path, { event: 'updated', data: this });
+                },
+                enumerable: true,
+                configurable: true,
+            });
         }
     }
 
 
+    static async fetch(filter = {}, sort = {}) {
+        // if (!this._fetched) {
+        // console.log('FETCHING!!!', this.name, this.constructor.name);
+        this._fetched = true;
+        const datas = await this._fetch(filter, sort);
+        const result = new Map();
+        for (const data of datas) {
+            const id = this._getIdFromData(data);
+            console.log(id);
+            // console.log(Store.get(this, id));
+            let o = null;
+            if (Store.has(this, id)) {
+                // console.log(data);
+                o = Store.get(this, id)
+                o.update(data);
+                if (Filter.pass(data, filter)) {
+                    result.set(id,o);
+                }
+            } else {
+                // console.log(data);
+                if (Filter.pass(data, filter)) {
+                    o = new this(data, id);
+                    result.set(id,o);
+                }
+            }
+        }
+        Sort.sort(result, sort);
+        return result;
+        // }
+    }
 
 
-
-    // static #consumers = new Map();
-
-    // // static #getItems(cls) {
-    // //     return MirraModel.#registry.get(cls);
-    // // }
-
-    // static provide(consumer) {
-    //     const cls = this.constructor;
-
-    //     if (!MirraModel.#consumers.get(cls)) {
-    //         MirraModel.#consumers.set(cls, []);
-    //     }
-    //     let consumers = MirraModel.#consumers.get(cls);
-
-    //     consumers.push(consumer);        
+    // static get items() {
+    //     console.log(this.constructor.name);
+    //     return Store.get(this.constructor);
     // }
 
-    // static async new(key) {
-    //     new this({}, key, false).load();
-    // }
+    // set the client version of the data
+    create(data, id) {
+        // console.log(this.path);
+        // chaining method to enable a .save() on the back of it
 
+        // data.forEach((v, k) => this.#_data.set(k, v));
+        this.#_data = data;
+        this.#_data._s = window.seq++;
+        this.#_data._t = Date.now();
+        this.#_data._u = browserId();
+        this.#_data._x = false;
 
-    // static async fetchIfAuto() {
-    //     // console.log("!!!", this.settings.fetch.auto);
-    //     if (this.settings.fetch.auto) {
-    //         await this.fetch();
-    //     }
-    // }
+        this.id = id;
+        this.#path = `${this.constructor.modelPath}/${this.id}`;
 
-
-    // get the client version of the data
-    get() {
-        // console.log.log(this);
-        return {
-            '#key': this.#key,
-            ...this.#_data
-        };
+        console.log(data,id);
+        bus.emit(this.path, { event: 'created', data: this });
+        return this;
     }
 
     // set the client version of the data
-    set(data) {
+    update(data) {
         // chaining method to enable a .save() on the back of it
-        this.#_data = {
-            ...this.#_data,
-            ...data,
-            _t: Date.now(),
-            _u: browserId(),
-            _x: false
-        };
-        // console.log(this.itemPath);
-        bus.emit(this.itemPath, { event: 'updated', data: this.#_data });
+
+        if (data._t === this.#_data._t && data._s === this.#_data._s && data._u === this.#_data._u) {
+            // console.log(data, this.#_data);
+            // no change
+        } else {
+            Object.entries(data).forEach(([k, v]) => this.#_data[k] = v);
+            this.#_data._s = window.seq++;
+            this.#_data._t = Date.now();
+            this.#_data._u = browserId();
+            this.#_data._x = false;
+
+            bus.emit(this.path, { event: 'updated', data: this });
+        }
         return this;
     }
 
     // load data from server and sync with client object
-    async load() {
-        // let t = this.#_t, u = this.#_u;
-        this.#data = await this._read();
+    // async load() {
+    //     // let t = this.#_t, u = this.#_u;
+    //     this.#data = await this._read();
 
 
-        // if (t && u && (t != this.#_t || u != this.#_u)) {
-        //     // handle conflicts
-        //     if (confirm('remote object was updated - overwrite your changes?')) {
-        //         Object.assign(this.#_data, this.#data);
-        //     }
-        // } else {
-        Object.assign(this.#_data, this.#data);
-        // }
-        this.#persisted = true;
+    //     // if (t && u && (t != this.#_t || u != this.#_u)) {
+    //     //     // handle conflicts
+    //     //     if (confirm('remote object was updated - overwrite your changes?')) {
+    //     //         Object.assign(this.#_data, this.#data);
+    //     //     }
+    //     // } else {
+    //     Object.assign(this.#_data, this.#data);
+    //     // }
+    //     this.#persisted = true;
 
-        // console.log.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$", this.#_data);
-        // console.log(this.#data);
-        // console.log.log(this);
-        bus.emit(this.itemPath, { event: 'updated', data: this.#_data });
-    }
+    //     // console.log.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$", this.#_data);
+    //     // console.log(this.#data);
+    //     // console.log.log(this);
+    //     bus.emit(this.itemPath, { event: 'updated', data: this.#_data });
+    // }
 
     // save data to server 
     async save() {
-        // console.log(1);
-        bus.emit(this.itemPath, { event: 'saving', data: this.#_data });
+        bus.emit(this.path, { event: 'saving', data: this });
 
-        // let t = this.#_t, u = this.#_u;
-        // await this.#read();
-        // // check for conflicts here? or just server?
-        // // copies properties from _data to data and persist it - chaining to enable a load() on the back of it (or maybe that's automatic?)
-        // // Object.assign(this.data, this._data);
-        // if (t && u && (t != this.#_t || u != this.#_u)) {
-        //     // handle conflicts
-        //     if (confirm('remote object was updated - overwrite your changes?')) {
-        //         this.#update(this.#_data);
-        //     }
-        // } else {
+        // conflict handling?
+
         if (this.#persisted) {
             await this._update(this.#_data);
         } else {
@@ -575,7 +666,7 @@ export class MirraModel {
         }
         // }
 
-        bus.emit(this.itemPath, { event: 'saved', data: this.#_data });
+        bus.emit(this.path, { event: 'saved', data: this });
 
         // this.load(); - let the socket message update it
 
@@ -583,8 +674,8 @@ export class MirraModel {
 
     // revert client data back to the saved server data
     async revert() {
-        Object.assign(this.#_data, this.#data);
-        bus.emit(this.itemPath, { event: 'updated', data: this.#_data });
+        this.#_data = new Map(this.#data);
+        bus.emit(this.path, { event: 'updated', data: this });
     }
 
     async undo() {
@@ -594,11 +685,11 @@ export class MirraModel {
     }
 
     async delete() {
-        const data = this.#_data;
-        bus.emit(this.itemPath, { event: 'deleting', data: data });
+        const data = { ...this };
+        bus.emit(this.path, { event: 'deleting', data: data });
         await this._delete();
         // mark the view(s) as deleted - which may mean invisible, or greyed out, or ...etc...
-        bus.emit(this.itemPath, { event: 'deleted', data: data });
+        bus.emit(this.path, { event: 'deleted', data: data });
     }
 
     static async _fetch(data) { }
@@ -611,68 +702,66 @@ export class MirraModel {
 
 
 export class MirraModelMongoDB extends MirraModel {
-    static async _fetch() {
-        // console.log("^^^^^^^");
+    static async _fetch(filter = {}, sort = {}) {
         // fetch records according to the criteria and/or policies
-        const result = await fetch("/" + this.type, {
+        const result = await fetch(this.modelPath, {
             method: "GET",
             headers: { "Content-Type": "application/json" }
         });
         if (check(result)) {
             const datas = await result.json();
             // console.log("*****", datas);
-            // return data;
-            for (const data of datas) {
-                new this(data, data._id);
-            }
+            return datas.map(data => MirraModelMongoDB.#fromServer(data));
         }
     }
-    async _create(data) {
+    static _getIdFromData(data) {
+        return data._id;
+    }
+    static _setIdToData(data, id) {
+        data._id = id;
+    }
 
-        const result = await fetch("/" + this.type, {
+    static #toServer(data) {
+        return {
+            ...data,
+            name: data.name?.toLowerCase()
+        };
+    }
+    static #fromServer(data) {
+        return {
+            ...data,
+            name: data.name?.toUpperCase()
+        };
+    }
+    async _create(data) {
+        // console.log("!!!", data);
+        const result = await fetch(this.constructor.modelPath, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                ...data,
-                _id: this.key
-            })
+            body: JSON.stringify(MirraModelMongoDB.#toServer(data))
         });
         if (check(result)) {
-            const data = await result.json();
-            // console.log("###", data);
+            const x = await result.json();
+            // console.log("###", x);
+        } else {
+            console.error(result);
         }
     }
     async _read() {
-        // console.log(1, `/${this.type}/${this.key}`);
-        const result = await fetch(`/${this.type}/${this.key}`);
-        // console.log(2, result);
+        const result = await fetch(this.path);
         let data = await result.json();
-        // console.log(3, data);
-        return data;
+        return MirraModelMongoDB.#fromServer(data);
     }
     async _update(data) {
-        // console.log(1, `/${this.type}/${this.key}`);
-        // console.log({            ...data,            _id: this.key,        });
-        await fetch(`/${this.type}/${this.key}`, {
+        await fetch(this.path, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                ...data,
-                _id: this.key,
-            })
+            body: JSON.stringify(MirraModelMongoDB.#toServer(data))
         });
     }
-    async _delete() {
-        // maybe mark a deleted flag rather than remove, so can be recovered / undone ?
-        await fetch(`/${this.type}/${this.key}`, {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                id: this.key,
-            })
-        });
-
-
+    async _delete(data) {
+        data._x = true;
+        await this._update(data);
     }
 
 }
@@ -752,23 +841,42 @@ export class MirraView extends LitElement {
     #ls = {};
     static #tabIndex = 100;
 
-
+    // connectedCallback() {
+    //     const cls = this.constructor;
+    //     // console.log("***", cls.name);
+    //     // console.trace();
+    //     for (let t in cls.properties) {
+    //         // console.log(t, this[t]);
+    //         if (this[t] instanceof MirraList) {
+    //             this[t].addCallback(() => {
+    //                 console.log("-*-");
+    //                 this.requestUpdate();
+    //             });
+    //         }
+    //     }
+    // }
 
     willUpdate(changedProperties) {
         const cls = this.constructor;
+        // console.log("***", cls.name);
+        // console.trace();
         for (let t in cls.properties) {
-            if (this[t] instanceof MirraConsumer) {
-                this[t].setCallback(() => this.requestUpdate());
+            // console.log(t, this[t]);
+            if (this[t] instanceof MirraList) {
+                if (!this.#ls[t]) {
+                    this[t].addCallback(() => this.requestUpdate());
+                    this.#ls[t] = cls.modelPath;
+                }
             } else {
-                console.log(t, this[t]?.itemPath, () => this.requestUpdate());
-                if (this[t]?.itemPath) {
+                // console.log(t, this[t]?.path, () => this.requestUpdate());
+                if (this[t]?.path) {
                     if (changedProperties.has(t)) {
-                        if (this[t].itemPath !== this.#ls[t]) {
+                        if (this[t].path !== this.#ls[t]) {
                             // Remove old listener and add new one
                             if (this.#ls[t]) {
                                 bus.off(this.#ls[t], () => this.requestUpdate());
                             }
-                            this.#ls[t] = this[t].itemPath;
+                            this.#ls[t] = this[t].path;
                             bus.on(this.#ls[t], () => this.requestUpdate());
                         }
                     }
@@ -781,10 +889,10 @@ export class MirraView extends LitElement {
     // willUpdate(changedProps) {
     //     if (!this.isConnected) return;
     // }
-// requestUpdate(...args) {
-//   if (!this.isConnected) return;
-//   super.requestUpdate(...args);
-// }
+    // requestUpdate(...args) {
+    //   if (!this.isConnected) return;
+    //   super.requestUpdate(...args);
+    // }
 
 
     disconnectedCallback() {
@@ -802,8 +910,8 @@ export class MirraView extends LitElement {
     }
 
     editable(model, modelProperty, config = {}) {
-        const value = model.get()?.[modelProperty] || '';
-        console.log(value);
+        const value = model[modelProperty] ?? '';
+        // console.log(value);
         const tabIndex = ++MirraView.#tabIndex;
 
         if (config.type === 'select') {
@@ -813,9 +921,10 @@ export class MirraView extends LitElement {
                     class="s-mediaType"
                     .value=${value}
                     @change=${(e) => {
-                    const val = e.target.value;
-                    model.set({ [modelProperty]: val }).save();
-                }}
+                        const val = e.target.value;
+                        model[modelProperty] = val;
+                        model.save();
+                    }}
                     >
                     ${Object.entries(config.options).map(
                     ([k, v]) => html`<option value=${k}>${v}</option>`
@@ -826,7 +935,7 @@ export class MirraView extends LitElement {
         }
 
         // Fallback element type: extract tag from config.html, or default to 'div'
-        console.log(value);
+        // console.log(value);
 
         // Create a dynamic element tag using Lit's `html`
         // This works because Lit allows tag name interpolation with caution
@@ -837,7 +946,8 @@ export class MirraView extends LitElement {
             tabIndex=${tabIndex}
             @focus=${(e) => {
                 MirraEdit.edit(e.target, (x) => {
-                    model.set({ [modelProperty]: x }).save();
+                    model[modelProperty] = x;
+                    model.save();
                 });
             }}
             >${value}</div>
@@ -846,258 +956,258 @@ export class MirraView extends LitElement {
 }
 
 
-export class __MirraView {
-    #models;
-    #ui;
-    static #tabIndex = 100;
-    static _views = {};
-    static _uiGroup = {};
+// export class __MirraView {
+//     #models;
+//     #ui;
+//     static #tabIndex = 100;
+//     static _views = {};
+//     static _uiGroup = {};
 
-    constructor(models = {}) {
-        const cls = this.constructor;  // 🔁 Access the static context
+//     constructor(models = {}) {
+//         const cls = this.constructor;  // 🔁 Access the static context
 
-        // console.log("_____", cls._initialised);
-        MirraView._init(cls);
+//         // console.log("_____", cls._initialised);
+//         MirraView._init(cls);
 
-        // console.log("$$$", models);
+//         // console.log("$$$", models);
 
-        // validate
-        const expected = cls.expects?.();  // ✅ Call static method from class, not instance
-        if (expected) {
-            for (const m in models) {
-                if (!(m in expected)) {
-                    err(`Model ${m} not expected in view - expected ${Object.keys(expected)}`);
-                }
-            }
-            for (const e in expected) {
-                if (!(e in models)) {
-                    err(`Model ${e} was expected in view but is missing`);
-                }
+//         // validate
+//         const expected = cls.expects?.();  // ✅ Call static method from class, not instance
+//         if (expected) {
+//             for (const m in models) {
+//                 if (!(m in expected)) {
+//                     err(`Model ${m} not expected in view - expected ${Object.keys(expected)}`);
+//                 }
+//             }
+//             for (const e in expected) {
+//                 if (!(e in models)) {
+//                     err(`Model ${e} was expected in view but is missing`);
+//                 }
 
-                // bus.on(models[e].constructor.itemsPath, cls.groupUpdate);
-            }
-        }
+//                 // bus.on(models[e].constructor.itemsPath, cls.groupUpdate);
+//             }
+//         }
 
-        this.#models = models;
-        if (MirraView._views[cls][this.id]) {
-            // console.log.log("...view already exists");
-        } else {
-            for (const m in models) {
-                // console.log.log("---", models[m].itemPath);
-                bus.on(models[m].itemPath, (data) => {
-                    // console.log.log(models[m].itemPath, this);
-                    if (data.event == 'updated') {
-                        // console.log.log('!!! YEAH !!!');
-                        this.update();
-                    }
-                    if (data.event == 'deleted') {
-                        // console.log.log('!!! NAH !!!');
-                        this.update();
-                    }
-                });
-            }
+//         this.#models = models;
+//         if (MirraView._views[cls][this.id]) {
+//             // console.log.log("...view already exists");
+//         } else {
+//             for (const m in models) {
+//                 // console.log.log("---", models[m].itemPath);
+//                 bus.on(models[m].itemPath, (data) => {
+//                     // console.log.log(models[m].itemPath, this);
+//                     if (data.event == 'updated') {
+//                         // console.log.log('!!! YEAH !!!');
+//                         this.update();
+//                     }
+//                     if (data.event == 'deleted') {
+//                         // console.log.log('!!! NAH !!!');
+//                         this.update();
+//                     }
+//                 });
+//             }
 
 
-            // console.log.log("$$$", this.#models);
-            this.create()
-            this.update(); // why not chained before work?
-            MirraView._views[cls][this.id] = this;
-            cls.updateGroup();
+//             // console.log.log("$$$", this.#models);
+//             this.create()
+//             this.update(); // why not chained before work?
+//             MirraView._views[cls][this.id] = this;
+//             cls.updateGroup();
 
-            // console.log(this.id);
-            // console.log(MirraView._views);
-        }
-    }
+//             // console.log(this.id);
+//             // console.log(MirraView._views);
+//         }
+//     }
 
-    get id() {
-        return Object.values(this.#models).reduce((s, item) => s + item.itemPath, ":");
-    }
+//     get id() {
+//         return Object.values(this.#models).reduce((s, item) => s + item.itemPath, ":");
+//     }
 
-    static _init(cls) {
-        // console.log(cls);
-        if (!cls._initialised) {
-            if (!MirraView._views[cls]) {
-                MirraView._views[cls] = {};
-            }
+//     static _init(cls) {
+//         // console.log(cls);
+//         if (!cls._initialised) {
+//             if (!MirraView._views[cls]) {
+//                 MirraView._views[cls] = {};
+//             }
 
-            cls.createGroup();
-            // console.log.log("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&");
-            const expected = cls.expects();
-            for (const e in expected) {
-                // console.log.log(expected[e].itemsPath);
-                bus.on(expected[e].itemsPath, data => {
-                    if (data.event == 'created') {
-                        // console.log(expected[e].item(data.key));
-                        // console.log("!"); 
-                        //const cls = this.constructor; 
-                        // console.log(cls); 
-                        // // MirraView.new(expected[e], data.key);
-                        if (MirraView._views[cls][data.key]) {
-                            // console.log.log("...view already exists!!!");
-                        } else {
-                            new cls({ [e]: expected[e].item(data.key) });
-                        }
-                    }
-                });
-            }
-            // console.log(bus);
-            cls._initialised = true;
-        }
+//             cls.createGroup();
+//             // console.log.log("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&");
+//             const expected = cls.expects();
+//             for (const e in expected) {
+//                 // console.log.log(expected[e].itemsPath);
+//                 bus.on(expected[e].itemsPath, data => {
+//                     if (data.event == 'created') {
+//                         // console.log(expected[e].item(data.key));
+//                         // console.log("!"); 
+//                         //const cls = this.constructor; 
+//                         // console.log(cls); 
+//                         // // MirraView.new(expected[e], data.key);
+//                         if (MirraView._views[cls][data.key]) {
+//                             // console.log.log("...view already exists!!!");
+//                         } else {
+//                             new cls({ [e]: expected[e].item(data.key) });
+//                         }
+//                     }
+//                 });
+//             }
+//             // console.log(bus);
+//             cls._initialised = true;
+//         }
 
-    }
+//     }
 
-    static async init(cls, selector) {
-        MirraView._init(this);
+//     static async init(cls, selector) {
+//         MirraView._init(this);
 
-        this.fetch(cls, true);
-        // this.fill(cls);
-        this.to(selector);
-    }
+//         this.fetch(cls, true);
+//         // this.fill(cls);
+//         this.to(selector);
+//     }
 
-    // static async new(cls, key) {
-    //     const item = await cls.new(key);
-    //     // const type = Object.keys(cls.expects())[0];
-    //     new this({ person: item });
+//     // static async new(cls, key) {
+//     //     const item = await cls.new(key);
+//     //     // const type = Object.keys(cls.expects())[0];
+//     //     new this({ person: item });
 
-    // }
+//     // }
 
-    // static async refreshGroup(cls) {
-    //     await cls.fetch(cls);
-    //     cls.fill(cls);
-    // }
+//     // static async refreshGroup(cls) {
+//     //     await cls.fetch(cls);
+//     //     cls.fill(cls);
+//     // }
 
-    static async fetch(cls, initial = false) {
-        await cls.fetch(initial);
-    }
+//     static async fetch(cls, initial = false) {
+//         await cls.fetch(initial);
+//     }
 
-    // static fill(cls) {
-    //     const type = Object.keys(this.expects())[0];
-    //     // console.log(type);
-    //     // console.log("###", cls.constructor.name, cls.items());
+//     // static fill(cls) {
+//     //     const type = Object.keys(this.expects())[0];
+//     //     // console.log(type);
+//     //     // console.log("###", cls.constructor.name, cls.items());
 
-    //     cls.items().forEach(item => {
-    //         // const data = {};
-    //         // data[type] = item;
-    //         // // console.log(data);
-    //         // // console.log({ [type] : item });
-    //         new this({ [type]: item });
-    //     });
+//     //     cls.items().forEach(item => {
+//     //         // const data = {};
+//     //         // data[type] = item;
+//     //         // // console.log(data);
+//     //         // // console.log({ [type] : item });
+//     //         new this({ [type]: item });
+//     //     });
 
-    //     // this.updateGroup();
-    // }
+//     //     // this.updateGroup();
+//     // }
 
-    static to(selector) {
-        // const cls = this.constructor;
-        // console.log.log(this.uiGroup, $(selector));
-        this.uiGroup.appendTo(selector);
-        // console.log.log(this.uiGroup, $(selector));
-    }
+//     static to(selector) {
+//         // const cls = this.constructor;
+//         // console.log.log(this.uiGroup, $(selector));
+//         this.uiGroup.appendTo(selector);
+//         // console.log.log(this.uiGroup, $(selector));
+//     }
 
-    get ui() {
-        return this.#ui;
-    }
-    set ui(ui) {
-        this.#ui = ui;
-    }
+//     get ui() {
+//         return this.#ui;
+//     }
+//     set ui(ui) {
+//         this.#ui = ui;
+//     }
 
-    static get uiGroup() {
-        if (!MirraView._uiGroup[this]) {
-            this.createGroup();
-        }
-        return MirraView._uiGroup[this];
-    }
-    static set uiGroup(uiGroup) {
-        MirraView._uiGroup[this] = uiGroup;
-    }
+//     static get uiGroup() {
+//         if (!MirraView._uiGroup[this]) {
+//             this.createGroup();
+//         }
+//         return MirraView._uiGroup[this];
+//     }
+//     static set uiGroup(uiGroup) {
+//         MirraView._uiGroup[this] = uiGroup;
+//     }
 
-    static get views() {
-        return Object.values(MirraView._views[this] ?? {});
-    }
+//     static get views() {
+//         return Object.values(MirraView._views[this] ?? {});
+//     }
 
-    model(name) {
-        return this.#models[name];
-    }
-    data(name) {
-        // console.log.log(this.#models);
-        return this.#models[name].get();
-    }
-    modeldata(name) {
-        return [this.model(name), this.data(name)];
-    }
+//     model(name) {
+//         return this.#models[name];
+//     }
+//     data(name) {
+//         // console.log.log(this.#models);
+//         return this.#models[name].get();
+//     }
+//     modeldata(name) {
+//         return [this.model(name), this.data(name)];
+//     }
 
-    static expects() {
-        return null;
-    }
+//     static expects() {
+//         return null;
+//     }
 
-    static createGroup() {
-        this.uiGroup = $();
-    }
-    static updateGroup() {
-        // console.log(1111);
-        return this;
-    }
+//     static createGroup() {
+//         this.uiGroup = $();
+//     }
+//     static updateGroup() {
+//         // console.log(1111);
+//         return this;
+//     }
 
-    create() {
-        this.ui = $();
-        return this;
-    }
-    update() {
-        // console.log.log("*1*");
-        return this;
-    }
+//     create() {
+//         this.ui = $();
+//         return this;
+//     }
+//     update() {
+//         // console.log.log("*1*");
+//         return this;
+//     }
 
-    show() {
-        this.ui.show();
-        return this;
-    }
-    hide() {
-        this.ui.hide();
-        return this;
-    }
-    destroy() {
-        this.ui.remove();
-        return this;
-    }
+//     show() {
+//         this.ui.show();
+//         return this;
+//     }
+//     hide() {
+//         this.ui.hide();
+//         return this;
+//     }
+//     destroy() {
+//         this.ui.remove();
+//         return this;
+//     }
 
-    editable(modelId, modelProperty, config = {}) {
-        let $ui;
-        switch (config.type) {
-            case 'select':
-                const $sel = $('<select>')
-                    .addClass('s-mediaType')
-                    .val(this.data(modelId)[modelProperty] || '')
-                    .on('change', (e) => {
-                        const val = $(e.target).val();
-                        this.model(modelId).set({ [modelProperty]: val }).save();
-                    })
-                    ;
-                for (let k of Object.keys(config.options)) {
-                    const v = config.options[k];
-                    // console.log.log(k, v);
-                    $sel.append($(`<option value="${k}">${v}</option>`));
-                }
-                $ui = $('<div>').append($sel);
-                $ui.attr('tabIndex', ++MirraView.#tabIndex);
-                break;
-            default:
-                $ui = $(config.html ?? '<div>')
-                    .addClass('editable')
-                    .on('focus',
-                        (e) => {
-                            MirraEdit.edit(e.target,
-                                x => {
-                                    this.model(modelId).set({ [modelProperty]: x }).save();
-                                }
-                            )
-                        }
-                    )
-                    ;
-                $ui.attr('tabIndex', ++MirraView.#tabIndex);
-                break;
-        }
-        return $ui;
-    }
-}
+//     editable(modelId, modelProperty, config = {}) {
+//         let $ui;
+//         switch (config.type) {
+//             case 'select':
+//                 const $sel = $('<select>')
+//                     .addClass('s-mediaType')
+//                     .val(this.data(modelId)[modelProperty] || '')
+//                     .on('change', (e) => {
+//                         const val = $(e.target).val();
+//                         this.model(modelId).set({ [modelProperty]: val }).save();
+//                     })
+//                     ;
+//                 for (let k of Object.keys(config.options)) {
+//                     const v = config.options[k];
+//                     // console.log.log(k, v);
+//                     $sel.append($(`<option value="${k}">${v}</option>`));
+//                 }
+//                 $ui = $('<div>').append($sel);
+//                 $ui.attr('tabIndex', ++MirraView.#tabIndex);
+//                 break;
+//             default:
+//                 $ui = $(config.html ?? '<div>')
+//                     .addClass('editable')
+//                     .on('focus',
+//                         (e) => {
+//                             MirraEdit.edit(e.target,
+//                                 x => {
+//                                     this.model(modelId).set({ [modelProperty]: x }).save();
+//                                 }
+//                             )
+//                         }
+//                     )
+//                     ;
+//                 $ui.attr('tabIndex', ++MirraView.#tabIndex);
+//                 break;
+//         }
+//         return $ui;
+//     }
+// }
 
 
 
@@ -1216,87 +1326,121 @@ export class MirraEdit {
 
 
 
-
-
-
 function emitter() {
-    const base = mitt();
-    const wildcardHandlers = [];
-    const seenEventIds = new Set();
+    const handlers = [];
 
     const patternToRegex = (pattern) =>
-        new RegExp(
-            '^' +
-            pattern
-                .split('*')
-                .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-                .join('.*') +
-            '$'
-        );
-
-    // Helper to get or assign a unique id to an event
-    function getEventId(type, event) {
-        if (event && event._eventId) {
-            return event._eventId;
-        }
-        // Compose a unique id: type + timestamp + random
-        const id = `${type}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-        if (event && typeof event === 'object') {
-            event._eventId = id;
-        }
-        return id;
-    }
+        new RegExp('^' + pattern.split('*').map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$');
 
     return {
         on(type, handler) {
-            console.log("%%%%%%%", type, handler);
-            // console.trace();
-            if (type.includes('*')) {
-                const regex = patternToRegex(type);
-                wildcardHandlers.push({ pattern: type, regex, handler });
-            } else {
-                base.on(type, (event) => {
-                    // Only fire if this event id hasn't been seen
-                    // if (!seenEventIds.has(event._eventId)) {
-                    console.log("!", event, type, handler);
-                    handler(event, type);
-                    // seenEventIds.add(event._eventId);
-                    // }
-                });
-            }
+            handlers.push({
+                pattern: type,
+                regex: type.includes('*') ? patternToRegex(type) : null,
+                handler
+            });
         },
         off(type, handler) {
-            if (type.includes('*')) {
-                for (let i = wildcardHandlers.length - 1; i >= 0; i--) {
-                    const h = wildcardHandlers[i];
-                    if (h.pattern === type && h.handler === handler) {
-                        wildcardHandlers.splice(i, 1);
-                    }
+            for (let i = handlers.length - 1; i >= 0; i--) {
+                if (handlers[i].pattern === type && handlers[i].handler === handler) {
+                    handlers.splice(i, 1);
                 }
-            } else {
-                base.off(type, handler);
             }
         },
         emit(type, event) {
-            // Assign or get unique event id
-            event._eventId = getEventId(type, event);
-            // if (seenEventIds.has(event._eventId)) {
-            //     // Already handled this event, skip
-            //     return;
-            // }
-
-            // Emit to base mitt
-            base.emit(type, event);
-
-            // Emit to wildcard handlers
-            for (const { regex, handler } of wildcardHandlers) {
-                if (regex.test(type)) {
+            for (const { pattern, regex, handler } of handlers) {
+                console.log(pattern, regex, handler);
+                const matches = regex ? regex.test(type) : pattern === type;
+                if (matches) {
+                    console.log("YES!");
                     handler(event, type);
                 }
             }
-        },
+        }
     };
 }
+
+
+
+// function emitter() {
+//     const base = mitt();
+//     const wildcardHandlers = [];
+//     const seenEventIds = new Set();
+
+//     const patternToRegex = (pattern) =>
+//         new RegExp(
+//             '^' +
+//             pattern
+//                 .split('*')
+//                 .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+//                 .join('.*') +
+//             '$'
+//         );
+
+//     // Helper to get or assign a unique id to an event
+//     function getEventId(type, event) {
+//         if (event && event._eventId) {
+//             return event._eventId;
+//         }
+//         // Compose a unique id: type + timestamp + random
+//         const id = `${type}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+//         if (event && typeof event === 'object') {
+//             event._eventId = id;
+//         }
+//         return id;
+//     }
+
+//     return {
+//         on(type, handler) {
+//             // console.log("%%%%%%%", type, handler);
+//             // console.trace();
+//             if (type.includes('*')) {
+//                 const regex = patternToRegex(type);
+//                 wildcardHandlers.push({ pattern: type, regex, handler });
+//             } else {
+//                 base.on(type, (event) => {
+//                     // Only fire if this event id hasn't been seen
+//                     // if (!seenEventIds.has(event._eventId)) {
+//                     console.log("!", event, type, handler);
+//                     handler(event, type);
+//                     // seenEventIds.add(event._eventId);
+//                     // }
+//                 });
+//             }
+//         },
+//         off(type, handler) {
+//             if (type.includes('*')) {
+//                 for (let i = wildcardHandlers.length - 1; i >= 0; i--) {
+//                     const h = wildcardHandlers[i];
+//                     if (h.pattern === type && h.handler === handler) {
+//                         wildcardHandlers.splice(i, 1);
+//                     }
+//                 }
+//             } else {
+//                 base.off(type, handler);
+//             }
+//         },
+//         emit(type, event) {
+//             // Assign or get unique event id
+//             event._eventId = getEventId(type, event);
+//             // if (seenEventIds.has(event._eventId)) {
+//             //     // Already handled this event, skip
+//             //     return;
+//             // }
+
+//             // Emit to base mitt
+//             base.emit(type, event);
+//             console.log(type,event);
+
+//             // Emit to wildcard handlers
+//             for (const { regex, handler } of wildcardHandlers) {
+//                 if (regex.test(type)) {
+//                     handler(event, type);
+//                 }
+//             }
+//         },
+//     };
+// }
 export const bus = emitter();
 
 

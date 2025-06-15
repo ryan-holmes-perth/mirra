@@ -1,13 +1,19 @@
-import asyncio
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+import asyncio, logging
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pymongo import MongoClient
 from pydantic import BaseModel, BeforeValidator, Field, ConfigDict, field_serializer
 from typing import Annotated, List, Optional, get_type_hints, Any
 from bson import ObjectId
+from datetime import datetime
 
 from contextlib import asynccontextmanager
+
+# Optional: configure logging
+logger = logging.getLogger("uvicorn.error")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,6 +34,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # Log the request body and validation error
+    body = await request.body()
+    logger.error(f"Validation error: {exc.errors()}")
+    logger.error(f"Request body: {body.decode()}")
+    
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": body.decode()},
+    )
 
 @app.get("/")
 def root():
@@ -215,9 +233,9 @@ class CRUDRouterFactory:
             saved_doc = collection.find_one({"_id": result.inserted_id})
             item = Model.model_validate(saved_doc)
             await manager.send_json({
-                "entity": f"{route_prefix}",
+                "path": route_prefix,
+                "id": result.inserted_id,
                 "mode": "create",
-                "key": result.inserted_id,
                 "data": item.model_dump(by_alias=True)
             })
             return item
@@ -255,9 +273,9 @@ class CRUDRouterFactory:
             updated_doc = collection.find_one({"_id": item_id})
             item = Model.model_validate(updated_doc)
             await manager.send_json({
-                "entity": f"{route_prefix}/{item_id}",
+                "path": route_prefix,
+                "id": item_id,
                 "mode": "update",
-                "key": item_id,
                 "data": item.model_dump(by_alias=True)
             })
             return item
@@ -276,9 +294,9 @@ class CRUDRouterFactory:
             deleted_doc = collection.find_one({"_id": item_id})
             item = Model.model_validate(deleted_doc)
             await manager.send_json({
-                "entity": f"{route_prefix}/{item_id}",
+                "path": route_prefix,
+                "id": item_id,
                 "mode": "delete",
-                "key": item_id,
                 "data": item.model_dump(by_alias=True)
             })
             return item
@@ -319,16 +337,23 @@ class CRUDRouterFactory:
 
 
 
-persons_collection = db["persons"]
+persons = db["persons"]
 
 class Person(MirraModel):
     name: str
 
-
-
-
-person_crud = CRUDRouterFactory(Person, persons_collection, "persons")
+person_crud = CRUDRouterFactory(Person, persons, "persons")
 app.include_router(person_crud.get_router("/persons"))
 
 
+
+events = db["events"]
+
+class Event(MirraModel):
+    name: str
+    start: Optional[datetime] = None  # Use datetime for best MongoDB/Pydantic compatibility
+    end: Optional[datetime] = None  # Use datetime for best MongoDB/Pydantic compatibility
+
+event_crud = CRUDRouterFactory(Event, events, "events")
+app.include_router(event_crud.get_router("/events"))
 
