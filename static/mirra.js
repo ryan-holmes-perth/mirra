@@ -247,6 +247,7 @@ export class MirraList {
         console.log('  event:\n  ', e);
 
         let changed = false;
+        let toDelete = false;
 
         // console.log(e);
         switch (e.event) {
@@ -265,8 +266,8 @@ export class MirraList {
                 const o = this.#items.get(e.data.id);
                 const pass = Filter.pass(e.data, this.#filter, Filter.CLIENT);
                 if (o && !pass) {
-                    this.#items.delete(e.data.id);
                     changed = true;
+                    toDelete = true;
                 } else if (!o && pass) {
                     // console.log("Updating", e.data.id, e.data);
                     this.#items.set(e.data.id, e.data);
@@ -285,9 +286,14 @@ export class MirraList {
 
         if (changed) {
             setTimeout(() => {
+                if (toDelete) {
+                    this.#items.delete(e.data.id);
+                }
+            }, 990);
+            setTimeout(() => {
                 this.#items = Sort.sort(this.#items, this.#sort);
                 this.#triggerCallbacks();
-            }, 0);
+            }, 1990);
         }
         // switch (e.event
     }
